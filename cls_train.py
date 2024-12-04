@@ -3,9 +3,10 @@ import torch.nn as nn
 from tqdm import tqdm
 import argparse
 import os
+from collections import defaultdict
 
 from dataset import split_task, get_dataset_new_task, get_loader
-from classifier.AlexNet.AlexNet import get_new_task_classifier
+from visualize import plot_task_vs_accuracy
 
 
 def task_classifier_train(
@@ -57,4 +58,55 @@ def task_classifier_train(
     print("Training completed.")
     return model
 
-# def eval_classifier():
+def eval_classifier(model, dataset_name, prev_task_class_lst, map_path, saver):
+    now_task = len(prev_task_class_lst) - 1
+    accs = []
+    for task, class_lst in enumerate(prev_task_class_lst):
+        acc, _ = _eval_classifier(dataset_name, class_lst, model, map_path)
+        accs.append(acc)
+        print(f'task {now_task} -> task {task} accuracy {acc}')
+
+    # 김민석의 구현
+
+    save_path = saver.get_plot_path()
+
+    plot_task_vs_accuracy(range(len(prev_task_class_lst)), accs, save_path)
+
+def _eval_classifier(model, dataset_name, class_lst, map_path):
+    _, test_dataset = get_dataset_new_task(dataset_name, class_lst)
+    loader = get_loader(test_dataset, batch_size=1, map_path=map_path)
+
+    model.eval()
+
+    total_correct = 0
+    total_samples = 0
+    class_correct = defaultdict(int)
+    class_total = defaultdict(int)
+
+    with torch.no_grad():
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(model.device), targets.to(model.device)
+            outputs = model(inputs)
+            _, predicted = outputs.max(1)
+
+            # Update total metrics
+            total_correct += (predicted == targets).sum().item()
+            total_samples += targets.size(0)
+
+            # Update class-wise metrics
+            for target, pred in zip(targets, predicted):
+                class_total[target.item()] += 1
+                if target == pred:
+                    class_correct[target.item()] += 1
+
+    # Calculate total accuracy
+    total_accuracy = 100.0 * total_correct / total_samples if total_samples > 0 else 0.0
+
+    # Calculate class-wise accuracy
+    class_accuracy = {
+        class_label: 100.0 * class_correct[class_label] / class_total[class_label]
+        if class_total[class_label] > 0 else 0.0
+        for class_label in class_total
+    }
+
+    return total_accuracy, class_accuracy
