@@ -5,7 +5,7 @@ from torch.utils.data import Subset, DataLoader, ConcatDataset, Dataset
 import random
 import os
 
-from dataset_utils import RelabeledDataset
+from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -77,3 +77,54 @@ def get_loader(datasets, batch_size, saver, shuffle=True, num_workers=0):
     )
 
     return loader
+
+def get_generate_dataset(folder_path, generator, total_size, batch_size, label_pool, device) -> ImageFolderDataset:
+
+    file_index = 0
+
+    batch_schedule = [batch_size] * (total_size//batch_size) + [total_size%batch_size]
+
+    # 균등하게 라벨 scheduling
+    label_schedule = []
+    while len(label_schedule) < total_size:
+        for label in label_pool:
+            label_schedule.append(label)
+
+            if len(label_schedule) == total_size:
+                break
+    
+    random.shuffle(label_schedule)
+
+    # batch schedule에 맞게 label schedule 자르기
+    label_batches = []
+    start = 0
+    for batch in batch_schedule:
+        label_batches.append(label_schedule[start:start + batch])
+        start += batch
+
+    # 샘플링 - {파일 번호}_{라벨}.png 로 folder path에 저장
+    for batch, labels in zip(batch_schedule, label_batches):
+        labels = torch.tensor(labels).to(device)
+            
+        images = generator.sample(batch, labels)
+
+        for image, label in zip(images, labels):
+            file_name = f"{file_index}_{label}.png"
+            save_as_image(image, os.path.join(folder_path, file_name))
+
+            file_index += 1
+
+    return ImageFolderDataset(folder_path=folder_path)
+
+def get_dataset_config(dataset_name):
+    assert dataset_name in DATASET_CONFIGS.keys()
+    
+    return DATASET_CONFIGS[dataset_name]
+    
+DATASET_CONFIGS = {
+    'mnist': {'size': 32, 'channels': 1, 'classes': 10},
+    'mnist-color': {'size': 32, 'channels': 3, 'classes': 10},
+    'cifar10': {'size': 32, 'channels': 3, 'classes': 10},
+    'cifar100': {'size': 32, 'channels': 3, 'classes': 100},
+    'svhn': {'size': 32, 'channels': 3, 'classes': 10},
+}
