@@ -1,6 +1,7 @@
 import os
 import copy
 import random
+from itertools import cycle
 
 import torch
 from torch import nn
@@ -53,55 +54,43 @@ class Id2():
         return noisy_image
 
     
-    def train(self, dataloader, epochs = 200, device="cpu", patience=5):
+    def train(self, dataloader, iters = 50000, device="cpu"):
         self.diffusion_network.to(device)
 
-        progress_bar = tqdm(range(epochs), desc="Training Progress", leave=True)
-        best_loss = 0.0
-        best_model = copy.deepcopy(self.diffusion_network)
-        no_improvement_epochs = 0
+        progress_bar = tqdm(range(iters), desc="Training Progress", leave=True)
 
-        for epoch in progress_bar:
+        dataloader = cycle(dataloader)
+
+        for iter in progress_bar:
             self.diffusion_network.train()
             running_loss = 0.0
             total = 0
 
-            for image, original_label, _ in dataloader:
-                image, labels = image.to(device), original_label.to(device)
+            image, _, new_label = next(dataloader)
 
-                self.diffusion_optimizer.zero_grad()
+            image, labels = image.to(device), new_label.to(device)
 
-                loss = self.diffusion_method.get_unet_loss(
-                    diffusion_network=self.diffusion_network,
-                    ori_image=image, 
-                    label=labels)
+            self.diffusion_optimizer.zero_grad()
 
-                loss.backward()
+            loss = self.diffusion_method.get_unet_loss(
+                diffusion_network=self.diffusion_network,
+                ori_image=image, 
+                label=labels)
 
-                self.diffusion_optimizer.step()
+            loss.backward()
 
-                running_loss += loss.item()
+            self.diffusion_optimizer.step()
 
-                total += labels.size(0)
+            running_loss += loss.item()
 
-            avg_loss = running_loss / len(dataloader)
+            total += labels.size(0)
+
+            avg_loss = running_loss / (iter+1)
 
             # Update progress bar
-            progress_bar.set_postfix(epoch=epoch + 1, loss=f"{avg_loss:.4f}")
+            progress_bar.set_postfix(iter=iter + 1, loss=f"{avg_loss:.4f}")
 
-            # Early stopping check
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                best_model = copy.deepcopy(self.diffusion_network)
-                no_improvement_epochs = 0  # Reset counter
-            else:
-                no_improvement_epochs += 1
-
-            if no_improvement_epochs >= patience:
-                print(f"\nEarly stopping triggered. Best loss: {best_loss:.2f}%")
-                break
 
         print("Training completed.")
-        return best_model
     
     

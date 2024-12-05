@@ -15,8 +15,12 @@ import diffusion.id2.network
 from saver import Saver
 
 import diffusion
+import logger as Logger
 
 def main(args, saver : Saver):
+
+    logger = Logger.FileLogger("/home/mskim/project/ddgr-/save/experiments0", "log.txt")
+    logger.on()
 
     if args.dataset == 'cifar100':
         class_idx_lst = split_task(args.class_nums, 100)
@@ -24,6 +28,7 @@ def main(args, saver : Saver):
         class_idx_lst = split_task(args.class_nums, 10)
 
     dataset_config = get_dataset_config(args.dataset)
+    n_classes = sum(args.class_nums)
 
     diffusion_method = diffusion.id2.method.Id2Method(
                 img_size=dataset_config['size'],
@@ -43,7 +48,6 @@ def main(args, saver : Saver):
         print(f'task {task} start~')
 
         new_task_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task])
-        n_classes = sum(args.class_nums[:task+1])
 
         if task == 0 and args.pre_train:
             # setting
@@ -52,13 +56,14 @@ def main(args, saver : Saver):
             # classifier pretraininig
             classifier = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
             cls_optimzier = torch.optim.Adam(classifier.parameters(), lr=args.cls_lr)
-            classifier = task_classifier_train(classifier, loader, cls_optimzier, device = args.device)
+            classifier = task_classifier_train(classifier, loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
             # classifier save
             save_path = os.path.join(saver.get_model_path('classifier'), 'weights.pth')
             torch.save(classifier.state_dict(), save_path)
 
             # generator pretraining
+            
             diffusion_network = diffusion.id2.network.UNet(
                 n_classes=n_classes,
                 img_channels=dataset_config['channels']
@@ -70,11 +75,12 @@ def main(args, saver : Saver):
             diffusion_model.diffusion_optimizer = diffusion_optimizer
 
             loader = get_loader([new_task_dataset], args.gen_batch_size, saver)
-            best_diffusion_network = diffusion_model.train(loader, epochs=args.gen_epochs, device=args.device)
+            diffusion_model.train(loader, iters=args.gen_iters, device=args.device)
+
 
             # generator save
             save_path = os.path.join(saver.get_model_path('generator'), 'weights.pth')
-            torch.save(best_diffusion_network.state_dict(), save_path)
+            torch.save(diffusion_network.state_dict(), save_path)
 
             saver.update_task_count()
             continue
@@ -97,7 +103,8 @@ def main(args, saver : Saver):
         classifier = get_new_task_classifier(
             sum(args.class_nums[:task+1]), 
             sum(args.class_nums[:task]), 
-            prev_model_path, args.head_shared)
+            prev_model_path, args.head_shared,
+            device=args.device)
 
         diffusion_model.diffusion_network = diffusion_network
         diffusion_model.diffusion_optimizer = diffusion_optimizer
@@ -106,10 +113,12 @@ def main(args, saver : Saver):
         generated_dataset = get_generate_dataset(
             folder_path=saver.get_image_path(),
             generator=diffusion_model,
-            total_size=int(len(new_task_dataset)*0.5),
+            total_size=int(len(new_task_dataset)*args.generate_ratio),
             batch_size=args.gen_batch_size,
             label_pool=prev_classes,
+            saver=saver,
             device=args.device) #
+        
 
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset], args.cls_batch_size, saver)
@@ -128,10 +137,10 @@ def main(args, saver : Saver):
 
         # diffusion train
         gen_loader = get_loader([new_task_dataset, generated_dataset], args.gen_batch_size, saver)
-        best_diffusion_network = diffusion_model.train(gen_loader, epochs=args.gen_epochs, device=args.device)
+        diffusion_model.train(gen_loader, iters=args.gen_iters, device=args.device)
 
         save_path = os.path.join(saver.get_model_path('generator'), 'weights.pth')
-        torch.save(best_diffusion_network.state_dict(), save_path)
+        torch.save(diffusion_network.state_dict(), save_path)
 
         # total task evaluation
 
@@ -139,6 +148,7 @@ def main(args, saver : Saver):
         # eval fid
         saver.update_task_count()
 
+    logger.off()
 
 
 
@@ -154,7 +164,7 @@ def arg():
     parser.add_argument("--gen_batch_size", type=int, default=32, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=10, help="Number of epochs of classifier")
-    parser.add_argument("--gen_epochs", type=int, default=10, help="Number of epochs of generator")
+    parser.add_argument("--gen_iters", type=int, default=50000, help="Number of epochs of generator")
 
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
@@ -163,6 +173,7 @@ def arg():
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
 
+    parser.add_argument("--generate_ratio", type=float, default=0.3, help="relative size of generated dataset")
     parser.add_argument("--lambda_cfg", type=float, default=1, help="weight of classifier free guidance score")
     parser.add_argument("--lambda_cg", type=float, default=7.5, help="weight of classifier guidance score")
 

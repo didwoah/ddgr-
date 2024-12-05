@@ -6,29 +6,31 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .classifier_guidance import ClassifierGuidedDiffusion
+from torch.optim.optimizer import Optimizer
+
+from .method import Id12Method
+from .network import UNet
 
 from utils import sample
 
 class Id12(nn.Module):
     def __init__(self, 
-                 model: ClassifierGuidedDiffusion,
-                 n_classes,
-                 lambda_cg,
-                 lambda_cfg,
-                 cg_cfg_ratio,
+                 diffusion_network: UNet,
+                 diffusion_method: Id12Method,
+                 diffusion_optimizer: Optimizer,
+                 
+                 classifier_network,
+
                  distillation_ratio,
                  distillation_label_ratio,
                  distillation_trial):
         super().__init__()
 
-        self.device = next(model.parameters()).device
-        self.model = model
-        self.n_classes = n_classes
+        self.diffusion_network = diffusion_network
+        self.diffusion_method = diffusion_method
+        self.diffusion_optimizer = diffusion_optimizer
 
-        self.lambda_cg = lambda_cg
-        self.lambda_cfg = lambda_cfg
-        self.cg_cfg_ratio = cg_cfg_ratio
+        self.classifier_network = classifier_network
 
         self.distillation_ratio = distillation_ratio
         self.distillation_label_ratio = distillation_label_ratio
@@ -39,50 +41,19 @@ class Id12(nn.Module):
         self.prev_scholar = None
 
 
-    def __sample(self, lambda_cg, lambda_cfg, y, batch_size):
-        assert batch_size > 0
+    def sample(self, size, y):
+        self.diffusion_network.eval()
+        self.classifier_network.eval()
 
-        # if len(self.label_pool) == 0:
-        #     label = None
-        # else:
-        #     label = torch.tensor(
-        #         random.choices(self.label_pool, k=batch_size)
-        #         ).to(self.model.device)
-
-        return self.model.sample(
-            batch_size=batch_size,
-            label=y,
-            lambda_cg=lambda_cg,
-            lambda_cfg=lambda_cfg)
-
-    def sample(self, size, y=None):
-        return self.__sample(self.lambda_cg, self.lambda_cfg, y, size)
-        # cg_size = int(self.cg_cfg_ratio * size)
-        # cfg_size = size - cg_size
-
-        # mode_cg = self.__sample(
-        #     lambda_cg=self.lambda_cg,
-        #     lambda_cfg=self.lambda_cfg,
-        #     batch_size=cg_size)
+        samples = self.diffusion_method.sample(
+            self.diffusion_network, 
+            self.classifier_network, 
+            size, y)
         
-        # path = os.path.join('.', 'sample','test_2','cg')
-        # os.makedirs(path, exist_ok=True)
-        # for i, image in enumerate(mode_cg):
-        #     save_as_image(image, os.path.join(path, f'{i}.png'))
-        
-        # mode_cfg = self.__sample(
-        #     lambda_cg=self.lambda_cg,
-        #     lambda_cfg=self.lambda_cfg,
-        #     batch_size=cfg_size)
-        
-        # path = os.path.join('.', 'sample','test_2','cfg')
-        # os.makedirs(path, exist_ok=True)
-        # for i, image in enumerate(mode_cfg):
-        #     save_as_image(image, os.path.join(path, f'{i}.png'))
-        
-        # concat = torch.concat([mode_cg, mode_cfg], dim=0)
+        self.diffusion_network.train()
+        self.classifier_network.train()
 
-        # return concat
+        return samples
     
     def classifier_noise_train_a_batch(self, x, y) -> torch.Tensor:
         rand_diffusion_step = self.model.sample_diffusion_step(batch_size=x.size(0))

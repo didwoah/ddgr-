@@ -13,7 +13,7 @@ from const import EPSILON
 
 from diffusion.diffusion import DDPM
 
-class Id2Method(DDPM):
+class Id12Method(DDPM):
 
     def __init__(
         self,
@@ -45,12 +45,16 @@ class Id2Method(DDPM):
 
 
     @torch.enable_grad()
-    def get_classifier_grad(self, classifier_network, noisy_image, label):
+    def get_classifier_grad(self, classifier_network, noisy_image, diffusion_step, label):
         noisy_image.requires_grad = True
-        out = classifier_network(noisy_image)
+        out = classifier_network(
+            noisy_image=noisy_image,
+            diffusion_step=diffusion_step,
+            label=label,
+        )
         log_prob = F.log_softmax(out, dim=-1)
             
-        selected = log_prob[torch.arange(log_prob.size(0), dtype=torch.long, device=self.device), label.long()]
+        selected = log_prob[torch.arange(log_prob.size(0), dtype=torch.long), label.long()]
 
         # "$\nabla_{x_{t}}\log{p_{\phi}}(y \vert x)$"
         return torch.autograd.grad(outputs=selected.sum(), inputs=noisy_image)[0]
@@ -67,9 +71,7 @@ class Id2Method(DDPM):
         
         noisy_image = noisy_image.detach().clone()
         grad = self.get_classifier_grad(
-            noisy_image=noisy_image,
-            classifier_network=classifier_network,
-            label=label
+            noisy_image=noisy_image, classifier_network=classifier_network, diffusion_step=diffusion_step, label=label,
         )
 
         with torch.inference_mode():
@@ -113,12 +115,7 @@ class Id2Method(DDPM):
         for diffusion_step_idx in pbar:
             pbar.set_description("Denoising...")
 
-            x = self.take_denoising_step(
-                noisy_image=x, 
-                diffusion_network=diffusion_network, 
-                classifier_network=classifier_network,
-                diffusion_step_idx=diffusion_step_idx, 
-                label=label)
+            x = self.take_denoising_step(x, diffusion_network, classifier_network, diffusion_step_idx=diffusion_step_idx, label=label)
 
             if n_frames is not None and (
                 diffusion_step_idx % (self.n_diffusion_steps // n_frames) == 0

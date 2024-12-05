@@ -18,7 +18,7 @@ class DDPM():
         super().__init__()
 
         self.img_size = img_size
-        self.device = device
+        self.device = torch.device(device)
         
         self.image_channels = image_channels
         self.n_diffusion_steps = n_diffusion_steps
@@ -74,13 +74,11 @@ class DDPM():
             diffusion_step=rand_diffusion_step,
             rand_noise=rand_noise,
         )
-        with torch.autocast(
-            device_type=self.device.type, dtype=torch.float32,
-        ) if self.device.type == "cuda" else contextlib.nullcontext():
-            pred_noise = diffusion_network(
-                noisy_image=noisy_image, diffusion_step=rand_diffusion_step, label=label,
-            )
-            return F.mse_loss(pred_noise, rand_noise, reduction="mean")
+        # with torch.autocast(device_type=self.device.type, dtype=torch.float32):
+        pred_noise = diffusion_network(
+            noisy_image=noisy_image, diffusion_step=rand_diffusion_step, label=label,
+        )
+        return F.mse_loss(pred_noise, rand_noise, reduction="mean")
 
     def sample(**kwargs):
         raise NotImplementedError

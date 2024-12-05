@@ -135,6 +135,7 @@ class UNet(nn.Module):
         assert all([i < len(channel_mults) for i in attns]), "attns index out of bound"
 
         time_channels = channels * 4
+        self.time_embed = time_channels
         self.time_embed = nn.Sequential(
             TimeEmbedding(max_len=1000, time_channels=time_channels),
             nn.Linear(channels, time_channels),
@@ -230,6 +231,9 @@ class UNet(nn.Module):
         assert len(xs) == 0
         return self.fin_block(x)
 
+
+    def change_label_embedding(self, n_classes):
+        self.label_emb = nn.Embedding(n_classes, self.time_embed)
 
 if __name__ == "__main__":
     model = UNet(n_classes=10)

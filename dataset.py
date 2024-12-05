@@ -78,9 +78,11 @@ def get_loader(datasets, batch_size, saver, shuffle=True, num_workers=0):
 
     return loader
 
-def get_generate_dataset(folder_path, generator, total_size, batch_size, label_pool, device) -> ImageFolderDataset:
+def get_generate_dataset(folder_path, generator, total_size, batch_size, label_pool, saver, device) -> ImageFolderDataset:
 
     file_index = 0
+
+    map = saver.get_map()
 
     batch_schedule = [batch_size] * (total_size//batch_size) + [total_size%batch_size]
 
@@ -104,11 +106,13 @@ def get_generate_dataset(folder_path, generator, total_size, batch_size, label_p
 
     # 샘플링 - {파일 번호}_{라벨}.png 로 folder path에 저장
     for batch, labels in zip(batch_schedule, label_batches):
+        org_labels = labels[:]
+        labels = [map[label] for label in labels]
         labels = torch.tensor(labels).to(device)
             
         images = generator.sample(batch, labels)
 
-        for image, label in zip(images, labels):
+        for image, label in zip(images, org_labels):
             file_name = f"{file_index}_{label}.png"
             save_as_image(image, os.path.join(folder_path, file_name))
 
