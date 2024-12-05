@@ -26,8 +26,6 @@ class Id2():
 
         self.classifier_network = classifier_network
 
-        self.device = next(diffusion_network.parameters()).device
-
 
     def sample(self, size, y):
         self.diffusion_network.eval()
@@ -68,14 +66,14 @@ class Id2():
             running_loss = 0.0
             total = 0
 
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to(device), labels.to(device)
+            for image, original_label, _ in dataloader:
+                image, labels = image.to(device), original_label.to(device)
 
                 self.diffusion_optimizer.zero_grad()
 
                 loss = self.diffusion_method.get_unet_loss(
                     diffusion_network=self.diffusion_network,
-                    ori_image=inputs, 
+                    ori_image=image, 
                     label=labels)
 
                 loss.backward()

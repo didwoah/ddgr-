@@ -62,7 +62,7 @@ def main(args, saver : Saver):
             diffusion_network = diffusion.id2.network.UNet(
                 n_classes=n_classes,
                 img_channels=dataset_config['channels']
-            )
+            ).to(args.device)
 
             diffusion_optimizer = torch.optim.Adam(diffusion_network.parameters(), lr=args.gen_lr)
 
@@ -87,7 +87,7 @@ def main(args, saver : Saver):
         diffusion_network = diffusion.id2.network.UNet(
             n_classes=n_classes,
             img_channels=dataset_config['channels']
-        )
+        ).to(args.device)
         prev_model_path = os.path.join(saver.get_prev_model_path('generator'), 'weights.pth')
         diffusion_network.load_state_dict(torch.load(prev_model_path))
 
