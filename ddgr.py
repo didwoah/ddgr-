@@ -3,68 +3,76 @@ import torch.nn as nn
 from tqdm import tqdm
 import argparse
 import os
+import json
 
 from dataset import split_task, get_dataset_new_task, get_loader
 from classifier.AlexNet.AlexNet import get_new_task_classifier
-from cls_train import task_classifier_train
+from cls_train import task_classifier_train, eval_classifier
+from saver import Saver
 
 
-def main(args):
+def main(args, saver : Saver):
 
     if args.dataset == 'cifar100':
-        task_class_lst = split_task(args.class_nums, 100)
+        class_idx_lst = split_task(args.class_nums, 100)
     elif args.dataset == 'cifar10':
-        task_class_lst = split_task(args.class_nums, 10)
+        class_idx_lst = split_task(args.class_nums, 10)
 
-    prev_cls_path = None
-
-    for task, task_class in enumerate(task_class_lst):
+    for task in range(len(class_idx_lst)):
         print(f'task {task} start~')
 
-        new_task_dataset, _ = get_dataset_new_task(args.dataset, task_class)
-        out_dim = len(task_class_lst[:task+1])
-
-        classifier = get_new_task_classifier(out_dim, prev_cls_path, args.head_shared)
+        new_task_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task])
 
         if task == 0 and args.pre_train:
             # setting
-            loader = get_loader([new_task_dataset], args.cls_batch_size, args.map_path)
+            loader = get_loader([new_task_dataset], args.cls_batch_size, saver)
 
             # classifier pretraininig
-            classifier = task_classifier_train(classifier, )
-            cls_argsimizer = torch.argsim.Adam(classifier.parameters(), lr=args.cls_lr)
-            classifier = task_classifier_train(classifier, loader, cls_argsimizer, device = args.device)
+            classifier = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
+            cls_optimzier = torch.optim.Adam(classifier.parameters(), lr=args.cls_lr)
+            classifier = task_classifier_train(classifier, loader, cls_optimzier, device = args.device)
 
             # classifier save
+            save_path = os.path.join(saver.get_model_path('classifier'), 'weights.pth')
+            torch.save(classifier.state_dict(), save_path)
 
             # generator pretraining
 
             # generator save
 
+            saver.update_task_count()
             continue
 
         # get generated image dataset
         prev_classes = []
         for i in range(task):
-            prev_classes.extend(task_class_lst[i])
+            prev_classes.extend(class_idx_lst[i])
         
+        generated_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task-1])
+
         # classifier train
-        cls_loader = get_loader([new_task_dataset, generated_dataset], args.batch_size, args.map_path)
-        classifier = task_classifier_train(classifier, )
-        cls_argsimizer = torch.optim.Adam(classifier.parameters(), lr=args.cls_lr)
-        classifier = task_classifier_train(classifier, cls_loader, cls_argsimizer, device = args.device)
+        cls_loader = get_loader([new_task_dataset, generated_dataset], args.cls_batch_size, saver)
 
-        # classifier save
+        prev_model_path = os.path.join(saver.get_prev_model_path('classifier'), 'weights.pth')
+        classifier = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_model_path, args.head_shared)
 
+        cls_optimzier = torch.optim.Adam(classifier.parameters(), lr=args.cls_lr)
+        classifier = task_classifier_train(classifier, cls_loader, cls_optimzier, device = args.device)
+
+        # eval acc & classifier save
+        eval_classifier(classifier, args.dataset, class_idx_lst[:task + 1], saver, device = args.device)
+
+        save_path = os.path.join(saver.get_model_path('classifier'), 'weights.pth')
+        torch.save(classifier.state_dict(), save_path)
 
         # diffusion train
 
 
         # total task evaluation
 
-        # eval acc
 
         # eval fid
+        saver.update_task_count()
 
 
 
@@ -84,7 +92,7 @@ def arg():
     parser.add_argument("--gen_epochs", type=int, default=10, help="Number of epochs of generator")
 
 
-    parser.add_argument("--cls_lr", type=float, default=0.001, help="Learning rate of classifier")
+    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
     parser.add_argument("--gen_lr", type=float, default=0.001, help="Learning rate of generator")
 
 
@@ -93,31 +101,18 @@ def arg():
     parser.add_argument("--lambda_cfg", type=float, default=0.001, help="weight of classifier free guidance score")
     parser.add_argument("--lambda_cg", type=float, default=0.001, help="weight of classifier guidance score")
 
+    parser.add_argument("--class_nums", type=list, default=[50, 5, 5, 5, 5,], help="[50, 5, 5, 5, 5,]")
+
+    parser.add_argument("--map_path", type=str, default="./", help="class map path")
+    parser.add_argument("--head_shared", action="store_true", help="Whether to share classifier head across tasks")
+    parser.add_argument("--pre_train", action="store_true", help="Whether to perform pre-training on task 0")
+
 
     args = parser.parse_args()
 
     return args
 
-def create_root_path(args):
-    """
-    Create a root path based on the argparse arguments.
-    """
-    root_path = os.path.join(
-        "./results",
-        f"{args.dataset}",
-        f"{args.cls_model}_cls",
-        f"cls_bs{args.cls_batch_size}_gen_bs{args.gen_batch_size}",
-        f"cls_ep{args.cls_epochs}_gen_ep{args.gen_epochs}",
-        f"cls_lr{args.cls_lr}_gen_lr{args.gen_lr}",
-        f"lambda_cfg{args.lambda_cfg}_lambda_cg{args.lambda_cg}",
-        f"device_{args.device}"
-    )
-
-    # Ensure the directory exists
-    os.makedirs(root_path, exist_ok=True)
-
-    print(f"Root path created: {root_path}")
-    return root_path
-
-
-# 처음에 map json파일 만들어야함
+if __name__ == "__main__":
+    args = arg()
+    saver = Saver(args)
+    main(args, saver)

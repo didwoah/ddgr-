@@ -19,7 +19,7 @@ def get_task_dataset(dataset, class_indicies):
 def split_task(class_nums: list, total_class_num=100):
     assert sum(class_nums) <= total_class_num
 
-    random_lst = range(total_class_num)
+    random_lst = list(range(total_class_num))
     random.shuffle(random_lst)
     
     out = []
@@ -59,8 +59,7 @@ def get_dataset_new_task(dataset_name, class_indicies):
     return get_task_dataset(train_dataset, class_indicies), get_task_dataset(test_dataset, class_indicies)
 
 
-
-def get_loader(datasets, batch_size, map_path, shuffle=True, num_workers=0):
+def get_loader(datasets, batch_size, saver, shuffle=True, num_workers=0):
 
     if not isinstance(datasets, list) or not all(isinstance(ds, Dataset) for ds in datasets):
         raise ValueError
@@ -68,7 +67,7 @@ def get_loader(datasets, batch_size, map_path, shuffle=True, num_workers=0):
         raise ValueError
     
     combined_dataset = ConcatDataset(datasets)
-    dataset = RelabeledDataset(combined_dataset, map_path)
+    dataset = RelabeledDataset(combined_dataset, saver)
     
     loader = DataLoader(
         dataset,

@@ -1,16 +1,15 @@
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-import argparse
 import os
 from collections import defaultdict
 
-from dataset import split_task, get_dataset_new_task, get_loader
+from dataset import get_dataset_new_task, get_loader
 from visualize import plot_task_vs_accuracy
 
 
 def task_classifier_train(
-    model, dataloader, argsimizer, epochs = 200, device="cpu", patience=5
+    model, dataloader, optimzier, epochs = 100, device="cpu", patience=5
 ):
     criterion = nn.CrossEntropyLoss()
     model.to(device)
@@ -25,13 +24,13 @@ def task_classifier_train(
         correct = 0
         total = 0
 
-        for batch_idx, (inputs, targets) in enumerate(dataloader):
+        for batch_idx, (inputs, _, targets) in enumerate(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)
-            argsimizer.zero_grad()
+            optimzier.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
-            argsimizer.step()
+            optimzier.step()
 
             running_loss += loss.item()
             _, predicted = outputs.max(1)
@@ -58,23 +57,26 @@ def task_classifier_train(
     print("Training completed.")
     return model
 
-def eval_classifier(model, dataset_name, prev_task_class_lst, map_path, saver):
-    now_task = len(prev_task_class_lst) - 1
+def eval_classifier(model, dataset_name, class_idx_lst, saver, device = 'cpu'):
     accs = []
-    for task, class_lst in enumerate(prev_task_class_lst):
-        acc, _ = _eval_classifier(dataset_name, class_lst, model, map_path)
+    for task, class_indicies in enumerate(class_idx_lst):
+        acc, _ = _eval_classifier(model, dataset_name, class_indicies, saver, device)
         accs.append(acc)
-        print(f'task {now_task} -> task {task} accuracy {acc}')
+        print(f'task {task} accuracy {acc}')
 
-    # 김민석의 구현
+    # Save accs to a text file
+    accs_txt_path = os.path.join(saver.get_results_path(), 'task_accuracies.txt')
+    with open(accs_txt_path, 'w') as f:
+        for task, acc in enumerate(accs):
+            f.write(f"Task {task}: {acc}\n")
+    print(f"Accuracy values saved to {accs_txt_path}")
 
-    save_path = saver.get_plot_path()
+    save_path = os.path.join(saver.get_results_path(), 'plot_task_vs_accuracy.png')
+    plot_task_vs_accuracy(range(len(class_idx_lst)), accs, save_path)
 
-    plot_task_vs_accuracy(range(len(prev_task_class_lst)), accs, save_path)
-
-def _eval_classifier(model, dataset_name, class_lst, map_path):
-    _, test_dataset = get_dataset_new_task(dataset_name, class_lst)
-    loader = get_loader(test_dataset, batch_size=1, map_path=map_path)
+def _eval_classifier(model, dataset_name, class_indicies, saver, device):
+    _, test_dataset = get_dataset_new_task(dataset_name = dataset_name, class_indicies = class_indicies)
+    loader = get_loader([test_dataset], batch_size=16, saver=saver)
 
     model.eval()
 
@@ -84,8 +86,8 @@ def _eval_classifier(model, dataset_name, class_lst, map_path):
     class_total = defaultdict(int)
 
     with torch.no_grad():
-        for inputs, targets in loader:
-            inputs, targets = inputs.to(model.device), targets.to(model.device)
+        for inputs, _, targets in loader:
+            inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
             _, predicted = outputs.max(1)
 
