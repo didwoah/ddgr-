@@ -75,7 +75,7 @@ class Saver():
     def get_image_path(self):
 
         task_root_path = self._get_task_root_path()
-        image_path = os.path.join(task_root_path, 'genrated_image')
+        image_path = os.path.join(task_root_path, 'generated_image')
 
         os.makedirs(image_path, exist_ok = True)
 
