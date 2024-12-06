@@ -21,7 +21,7 @@ import logger as Logger
 
 def main(args, saver : Saver):
 
-    logger = Logger.FileLogger("/home/myhong/ddgr-/save/experiments0", "log.txt")
+    logger = Logger.FileLogger("./save/experiments0", "log.txt")
     logger.on()
 
     if args.dataset == 'cifar100':
