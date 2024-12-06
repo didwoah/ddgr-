@@ -66,83 +66,86 @@ class Id12Method(DDPM):
         return torch.autograd.grad(outputs=selected.sum(), inputs=noisy_image)[0]
 
 
-    # @torch.inference_mode()
-    def take_denoising_step(self, diffusion_network, classifier_network, noisy_image, diffusion_step_idx, label):
+    @torch.no_grad()
+    def p_sample(self, gen_net, cls_net, x_t, t, y):
+
         diffusion_step = self.batchify_diffusion_steps(
-            diffusion_step_idx=diffusion_step_idx, batch_size=noisy_image.size(0),
+            diffusion_step_idx=t, batch_size=x_t.size(0),
         )
+
         alpha_t = self.index(self.alpha, diffusion_step=diffusion_step)
         beta_t = self.index(self.beta, diffusion_step=diffusion_step)
         alpha_bar_t = self.index(self.alpha_bar, diffusion_step=diffusion_step)
         
-        noisy_image = noisy_image.detach().clone()
+        x_t = x_t.detach().clone()
         
 
         with torch.inference_mode():
-            pred_noise_cond = diffusion_network(
-                noisy_image=noisy_image.detach(), diffusion_step=diffusion_step, label=label,
+            pred_noise_cond = gen_net(
+                noisy_image=x_t.detach(), diffusion_step=diffusion_step, label=y,
             )
 
-            pred_noise_uncond = diffusion_network(
-                noisy_image=noisy_image.detach(), diffusion_step=diffusion_step, label=None
+            pred_noise_uncond = gen_net(
+                noisy_image=x_t.detach(), diffusion_step=diffusion_step, label=None
             )
             
         # approximating \nabla_{x_t} log p(y | x_t)  \approx   \nabla_{x_t} log p(y | x_0)
-        grad = self.get_classifier_grad(
-            noisy_image=noisy_image,
-            alpha_bar_t=alpha_bar_t,
-            pred_noise_uncond=pred_noise_uncond,
-            classifier_network=classifier_network,
-            label=label
-        )
+        # grad = self.get_classifier_grad(
+        #     noisy_image=x_t,
+        #     alpha_bar_t=alpha_bar_t,
+        #     pred_noise_uncond=pred_noise_uncond,
+        #     classifier_network=cls_net,
+        #     label=y
+        # )
 
-        cg_coef = -(1 - alpha_bar_t).sqrt()
-        # cg_coef = -beta_t
-        cg_term = cg_coef * self.lambda_cg * grad
+        # cg_coef = -(1 - alpha_bar_t).sqrt()
 
-        cfg_term = self.lambda_cfg*(pred_noise_cond - pred_noise_uncond)
+        # cg_term = cg_coef * self.lambda_cg * grad
 
-        pred_noise = pred_noise_cond + cg_term + cfg_term
+        cfg_term = 7.5*(pred_noise_cond - pred_noise_uncond)
+
+        pred_noise = pred_noise_cond + cfg_term
 
         eps = torch.tensor(EPSILON).reshape(-1, 1, 1, 1).to(self.device)
         model_mean = (1 / (alpha_t.sqrt() + eps)) * (
-            noisy_image - ((beta_t / ((1 - alpha_bar_t).sqrt() + eps)) * pred_noise)
+            x_t - ((beta_t / ((1 - alpha_bar_t).sqrt() + eps)) * pred_noise)
         )
         model_var = beta_t
 
-        if diffusion_step_idx > 0:
-            rand_noise = self.sample_noise(batch_size=noisy_image.size(0))
+        if t > 0:
+            noise = self.sample_noise(batch_size=x_t.size(0))
         else:
-            rand_noise = torch.zeros(
-                size=(noisy_image.size(0), self.image_channels, self.img_size, self.img_size),
-                device=self.device,
-            )
-        return model_mean + (model_var ** 0.5) * rand_noise
+            noise = torch.zeros_like(x_t)
 
-    def perform_denoising_process(self, diffusion_network, classifier_network, noisy_image, start_diffusion_step_idx, label, n_frames=None):
+        return model_mean + (model_var ** 0.5) * noise
+
+    @torch.no_grad()
+    def perform_denoising_process(self, gen_net, cls_net, x_T, y, n_frames=None):
         if n_frames is not None:
             frames = list()
 
-        x = noisy_image
-        pbar = tqdm(range(start_diffusion_step_idx, -1, -1), leave=False)
-        for diffusion_step_idx in pbar:
+        x_t = x_T
+        pbar = tqdm(range(self.n_diffusion_steps - 1, -1, -1), leave=False)
+        for t in pbar:
             pbar.set_description("Denoising...")
 
-            x = self.take_denoising_step(diffusion_network, classifier_network, x, diffusion_step_idx=diffusion_step_idx, label=label)
+            x_t = self.p_sample(gen_net, cls_net, x_t, t=t, y=y)
 
             if n_frames is not None and (
-                diffusion_step_idx % (self.n_diffusion_steps // n_frames) == 0
+                t % (self.n_diffusion_steps // n_frames) == 0
             ):
-                frames.append(self._get_frame(x))
-        return frames if n_frames is not None else x
+                frames.append(self._get_frame(x_t))
 
-    def sample(self, diffusion_network, classifier_network, batch_size, label):
-        rand_noise = self.sample_noise(batch_size=batch_size)
+        return frames if n_frames is not None else x_t
+
+    @torch.no_grad()
+    def sample(self, gen_net, cls_net, batch_size, label):
+        x_T = self.sample_noise(batch_size)
+
         return self.perform_denoising_process(
-            noisy_image=rand_noise,
-            diffusion_network=diffusion_network,
-            classifier_network=classifier_network,
-            start_diffusion_step_idx=self.n_diffusion_steps - 1,
-            label=label,
+            x_T=x_T,
+            gen_net=gen_net,
+            cls_net=cls_net,
+            y=label,
             n_frames=None,
         )

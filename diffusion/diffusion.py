@@ -5,7 +5,7 @@ from tqdm import tqdm
 import contextlib
 
 
-class DDPM():
+class DDPM(nn.Module):
     def __init__(
         self,
         img_size,
@@ -38,17 +38,20 @@ class DDPM():
     def index(x, diffusion_step):
         return x[diffusion_step][:, None, None, None]
 
+    @torch.no_grad()
     def sample_noise(self, batch_size):
         return torch.randn(
             size=(batch_size, self.image_channels, self.img_size, self.img_size),
             device=self.device,
         )
 
+    @torch.no_grad()
     def sample_diffusion_step(self, batch_size):
         return torch.randint(
             0, self.n_diffusion_steps, size=(batch_size,), device=self.device,
         )
 
+    @torch.no_grad()
     def batchify_diffusion_steps(self, diffusion_step_idx, batch_size):
         return torch.full(
             size=(batch_size,),
@@ -56,29 +59,34 @@ class DDPM():
             dtype=torch.long,
             device=self.device,
         )
+    
+    @torch.no_grad()
+    def q_sample(self, x_0, t, nosie=None):
 
-    def perform_diffusion_process(self, ori_image, diffusion_step, rand_noise=None):
-        alpha_bar_t = self.index(self.alpha_bar, diffusion_step=diffusion_step)
-        mean = (alpha_bar_t ** 0.5) * ori_image
+        alpha_bar_t = self.index(self.alpha_bar, diffusion_step=t)
+        mean = (alpha_bar_t ** 0.5) * x_0
         var = 1 - alpha_bar_t
-        if rand_noise is None:
-            rand_noise = self.sample_noise(batch_size=ori_image.size(0))
-        noisy_image = mean + (var ** 0.5) * rand_noise
-        return noisy_image
 
-    def get_unet_loss(self, diffusion_network, ori_image, label):
-        rand_diffusion_step = self.sample_diffusion_step(batch_size=ori_image.size(0))
-        rand_noise = self.sample_noise(batch_size=ori_image.size(0))
-        noisy_image = self.perform_diffusion_process(
-            ori_image=ori_image,
-            diffusion_step=rand_diffusion_step,
-            rand_noise=rand_noise,
-        )
+        if nosie is None:
+            nosie = self.sample_noise(batch_size=x_0.size(0))
+
+        x_t = mean + (var ** 0.5) * nosie
+
+        return x_t
+
+    def get_loss(self, network, x_0, y):
+        t = self.sample_diffusion_step(batch_size=x_0.size(0))
+        noise = self.sample_noise(batch_size=x_0.size(0))
+
+        x_t = self.q_sample(x_0, t, noise)
+
         # with torch.autocast(device_type=self.device.type, dtype=torch.float32):
-        pred_noise = diffusion_network(
-            noisy_image=noisy_image, diffusion_step=rand_diffusion_step, label=label,
+        pred_noise = network(
+            noisy_image=x_t, diffusion_step=t, label=y,
         )
-        return F.mse_loss(pred_noise, rand_noise, reduction="mean")
 
+        return F.mse_loss(pred_noise, noise, reduction="mean")
+
+    @torch.no_grad()
     def sample(**kwargs):
         raise NotImplementedError

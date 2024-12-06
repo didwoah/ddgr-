@@ -60,10 +60,10 @@ class Id2():
     def get_noisy_image(self, x):
         rand_diffusion_step = self.diffusion_method.sample_diffusion_step(batch_size=x.size(0))
         rand_noise = self.diffusion_method.sample_noise(batch_size=x.size(0))
-        noisy_image = self.diffusion_method.perform_diffusion_process(
-            ori_image=x,
-            diffusion_step=rand_diffusion_step,
-            rand_noise=rand_noise,
+        noisy_image = self.diffusion_method.q_sample(
+            x_0=x,
+            t=rand_diffusion_step,
+            nosie=rand_noise,
         )
         return noisy_image
 
@@ -86,10 +86,10 @@ class Id2():
 
             self.diffusion_optimizer.zero_grad()
 
-            loss = self.diffusion_method.get_unet_loss(
-                diffusion_network=self.diffusion_network,
-                ori_image=image, 
-                label=labels)
+            loss = self.diffusion_method.get_loss(
+                network=self.diffusion_network,
+                x_0=image, 
+                y=labels)
 
             loss.backward()
 

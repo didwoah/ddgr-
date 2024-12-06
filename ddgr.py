@@ -197,15 +197,15 @@ def arg():
     parser.add_argument("--distillation_trial", type=int, default=1, help="Number of sampling per each label")
 
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=8, help="Batch size for training generator")
+    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=50, help="Number of epochs of classifier")
     
-    parser.add_argument("--gen_iters", type=int, default=50000, help="Number of iterations of generator")
+    parser.add_argument("--gen_iters", type=int, default=100000, help="Number of iterations of generator")
 
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
-    parser.add_argument("--gen_lr", type=float, default=0.001, help="Learning rate of generator")
+    parser.add_argument("--gen_lr", type=float, default=2e-4, help="Learning rate of generator")
 
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")

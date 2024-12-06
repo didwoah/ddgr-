@@ -124,9 +124,9 @@ class Id12(nn.Module):
 
         self.diffusion_optimizer.zero_grad()
                
-        new_task_loss = self.diffusion_method.get_unet_loss(self.diffusion_network, x, y)
+        new_task_loss = self.diffusion_method.get_loss(self.diffusion_network, x, y)
         if x_ is not None and y_ is not None:
-            old_task_loss = self.diffusion_method.get_unet_loss(self.diffusion_network, x_, y_)
+            old_task_loss = self.diffusion_method.get_loss(self.diffusion_network, x_, y_)
 
             loss = (
                 importance_of_new_task * new_task_loss +
@@ -158,8 +158,6 @@ class Id12(nn.Module):
 
         for iter in progress_bar:
             self.diffusion_network.train()
-            running_loss = 0.0
-            total = 0
 
             image, _, new_label = next(dataloader)
 
@@ -168,14 +166,8 @@ class Id12(nn.Module):
             # train with distillation
             loss = self.train_a_batch(x=image, y=labels, device=device)
 
-            running_loss += loss.item()
-
-            total += labels.size(0)
-
-            avg_loss = running_loss / (iter+1)
-
             # Update progress bar
-            progress_bar.set_postfix(iter=iter + 1, loss=f"{avg_loss:.4f}")
+            progress_bar.set_postfix(iter=iter + 1, loss=f"{loss.item():.4f}")
 
 
         print("Training completed.")
@@ -204,10 +196,10 @@ class Id12(nn.Module):
         for _ in range(trial):
             rand_diffusion_step = self.diffusion_method.sample_diffusion_step(batch_size=x.size(0))
             rand_noise = self.diffusion_method.sample_noise(batch_size=x.size(0)).detach()
-            noisy_image = self.diffusion_method.perform_diffusion_process(
-                ori_image=x,
-                diffusion_step=rand_diffusion_step,
-                rand_noise=rand_noise,
+            noisy_image = self.diffusion_method.q_sample(
+                x_0=x,
+                t=rand_diffusion_step,
+                nosie=rand_noise,
             ).detach()
 
             for label in label_pool:
