@@ -45,9 +45,19 @@ class Id2Method(DDPM):
 
 
     @torch.enable_grad()
-    def get_classifier_grad(self, classifier_network, noisy_image, label):
+    def get_classifier_grad(self, classifier_network, alpha_bar_t, pred_noise_uncond, noisy_image, label):
         noisy_image.requires_grad = True
-        out = classifier_network(noisy_image)
+        
+        # out = classifier_network(noisy_image)   # noisy_image = x_t  -->   We trained the classifier network using x_0
+        
+        # using tweedie's formula
+        x_0 = (noisy_image - (1 - alpha_bar_t).sqrt() * pred_noise_uncond) / alpha_bar_t.sqrt()
+        
+        out = classifier_network(x_0)   # $\nabla_{x_{t}}\log{p_{\phi}}(y | x_0) not x_t
+        
+        # But, we can approximate p(y | x_t)  \approx  p(y | x_0)   from Diffusion Posterior Sampling Theorem 1.
+        # At this case, forward measurement operator can be nonlinear operator. --> classifier p(y | x) is nonlinear
+        
         log_prob = F.log_softmax(out, dim=-1)
             
         selected = log_prob[torch.arange(log_prob.size(0), dtype=torch.long, device=self.device), label.long()]
@@ -66,12 +76,7 @@ class Id2Method(DDPM):
         alpha_bar_t = self.index(self.alpha_bar, diffusion_step=diffusion_step)
         
         noisy_image = noisy_image.detach().clone()
-        grad = self.get_classifier_grad(
-            noisy_image=noisy_image,
-            classifier_network=classifier_network,
-            label=label
-        )
-
+        
         with torch.inference_mode():
             pred_noise_cond = diffusion_network(
                 noisy_image=noisy_image.detach(), diffusion_step=diffusion_step, label=label,
@@ -80,6 +85,15 @@ class Id2Method(DDPM):
             pred_noise_uncond = diffusion_network(
                 noisy_image=noisy_image.detach(), diffusion_step=diffusion_step, label=None
             )
+        
+        # approximating \nabla_{x_t} log p(y | x_t)  \approx   \nabla_{x_t} log p(y | x_0)
+        grad = self.get_classifier_grad(
+            noisy_image=noisy_image,
+            alpha_bar_t=alpha_bar_t,
+            pred_noise_uncond=pred_noise_uncond,
+            classifier_network=classifier_network,
+            label=label
+        )
 
         cg_coef = -(1 - alpha_bar_t).sqrt()
         # cg_coef = -beta_t

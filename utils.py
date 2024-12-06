@@ -13,6 +13,54 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import ToPILImage, ToTensor
 
+def get_diffusion_model(dataset_config, args, class_idx_lst):
+    from diffusion import id1, id2, id12
+    
+    if args.method == "id1":
+        pass
+    elif args.method == "id2":
+        diffusion_method = id2.Id2Method(
+                img_size=dataset_config['size'],
+                image_channels=dataset_config['channels'],
+                device=args.device,
+                lambda_cg=args.lambda_cg,
+                lambda_cfg=args.lambda_cfg,)
+    
+        diffusion_model = id2.Id2(
+                    diffusion_network=None,
+                    prev_diffusion_network=None,
+                    diffusion_method=diffusion_method,
+                    diffusion_optimizer=None,
+                    classifier_network=None,
+                    label_pool=len(class_idx_lst[0]),
+                    prev_label_pool=None,
+                    distillation_ratio=args.distillation_ratio,
+                    distillation_label_ratio=args.distillation_label_ratio,
+                    distillation_trial=args.distillation_trial
+                )
+    elif args.method == "id12":
+        diffusion_method = id12.Id12Method(
+                img_size=dataset_config['size'],
+                image_channels=dataset_config['channels'],
+                device=args.device,
+                lambda_cg=args.lambda_cg,
+                lambda_cfg=args.lambda_cfg,)
+    
+        diffusion_model = id12.Id12(
+                    diffusion_network=None,
+                    prev_diffusion_network=None,
+                    diffusion_method=diffusion_method,
+                    diffusion_optimizer=None,
+                    classifier_network=None,
+                    label_pool=len(class_idx_lst[0]),
+                    prev_label_pool=None,
+                    distillation_ratio=args.distillation_ratio,
+                    distillation_label_ratio=args.distillation_label_ratio,
+                    distillation_trial=args.distillation_trial
+                )
+    
+    return diffusion_model       
+
 
 def label_squeezing_collate_fn(batch):
     # for b in batch:
@@ -118,11 +166,11 @@ def gaussian_intiailize(model, std=.01):
         else:
             nn.init.constant_(p, 0)
 
-def sample(list, count):
-        selected = random.sample(list, count)
-        for i in selected:
-            list.remove(i)
-        return selected, list
+def sample(nums, count):
+    selected = random.sample([i for i in range(nums)], count)
+    # for i in selected:
+    #     list.remove(i)
+    return selected
 
 def tensorToPIL(tensor: torch.Tensor) -> Image:
     tensor = tensor.clone()

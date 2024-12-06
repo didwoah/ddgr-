@@ -6,7 +6,7 @@ import torch
 from torchvision.transforms import ToPILImage, ToTensor
 from PIL import Image
 
-def _get_map(labels, saver):
+def _get_map(curr_classes, saver):
 
     start = 0
 
@@ -15,7 +15,7 @@ def _get_map(labels, saver):
     if len(prev_map) > 0:
         start = max(prev_map.values()) + 1
 
-    new_labels = [label for label in labels if label not in prev_map.keys()]
+    new_labels = [label for label in curr_classes if label not in prev_map.keys()]
     new_map = {label: idx + start for idx, label in enumerate(new_labels)}
     updated_map  = {**prev_map, **new_map}
 
@@ -24,18 +24,24 @@ def _get_map(labels, saver):
     return updated_map 
 
 class RelabeledDataset(Dataset):
-    def __init__(self, dataset, saver):
+    def __init__(self, dataset, curr_classes, saver, test=False):
         self.dataset = dataset
-        original_labels = sorted(set(label for _, label in dataset))
-        self.label_map = _get_map(original_labels, saver)
+        if not test:
+            self.label_map = _get_map(curr_classes, saver)
+        else:
+            self.label_map = saver.get_map()
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
         data, original_label = self.dataset[idx]
-        new_label = self.label_map[original_label]
-        return data, original_label, new_label
+        if type(original_label) == int:
+            new_label = self.label_map[original_label]
+            return data, torch.tensor(original_label), torch.tensor(new_label)
+        else:
+            new_label = self.label_map[original_label.item()]
+        return data, torch.tensor(original_label), torch.tensor(new_label)
     
 
 def files_in_directory(directory_path):
@@ -75,6 +81,6 @@ class ImageFolderDataset(Dataset):
         # 이미지 로드
         img_path = os.path.join(self.folder_path, self.image_paths[index])
         image = self.transform(Image.open(img_path))
-        label = torch.tensor([self.get_label_from_image_path(img_path)], dtype=torch.long)
+        label = torch.tensor(self.get_label_from_image_path(img_path), dtype=torch.long)
         
         return image, label

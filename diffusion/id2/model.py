@@ -18,7 +18,17 @@ class Id2():
                  diffusion_method: Id2Method,
                  diffusion_optimizer: Optimizer,
                  
-                 classifier_network):
+                 classifier_network,
+                 
+                 label_pool,
+                 prev_diffusion_network: UNet = None,
+                 prev_label_pool = None,
+                 
+                 # Not needed
+                 distillation_ratio=None,
+                 distillation_label_ratio=None,
+                 distillation_trial=None
+                 ):
         super().__init__()
 
         self.diffusion_network = diffusion_network
@@ -26,6 +36,10 @@ class Id2():
         self.diffusion_optimizer = diffusion_optimizer
 
         self.classifier_network = classifier_network
+        
+        self.label_pool = label_pool
+        self.prev_diffusion_network = prev_diffusion_network
+        self.prev_label_pool = prev_label_pool
 
 
     def sample(self, size, y):

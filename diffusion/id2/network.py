@@ -135,7 +135,6 @@ class UNet(nn.Module):
         assert all([i < len(channel_mults) for i in attns]), "attns index out of bound"
 
         time_channels = channels * 4
-        self.time_embed = time_channels
         self.time_embed = nn.Sequential(
             TimeEmbedding(max_len=1000, time_channels=time_channels),
             nn.Linear(channels, time_channels),
@@ -143,6 +142,7 @@ class UNet(nn.Module):
             nn.Linear(time_channels, time_channels),
         )
         self.label_emb = nn.Embedding(n_classes, time_channels)
+        self.time_channels = time_channels
 
         self.init_conv = nn.Conv2d(img_channels, channels, 3, 1, 1)
         self.down_blocks = nn.ModuleList()
@@ -202,6 +202,14 @@ class UNet(nn.Module):
             Swish(),
             nn.Conv2d(cur_channels, img_channels, 3, 1, 1)
         )
+        
+    def extend_embedder(self, n_classes, prev_n_classes):
+        embedder = nn.Embedding(n_classes, self.time_channels)
+        
+        # weight copy from old embedder to new embedder
+        embedder.weight.data[:prev_n_classes] = self.label_emb.weight.data
+        self.time_embed = embedder
+        
 
     def forward(self, noisy_image, diffusion_step, label):
         x = self.init_conv(noisy_image)
@@ -230,10 +238,6 @@ class UNet(nn.Module):
                 x = layer(x, t + y)
         assert len(xs) == 0
         return self.fin_block(x)
-
-
-    def change_label_embedding(self, n_classes):
-        self.label_emb = nn.Embedding(n_classes, self.time_embed)
 
 if __name__ == "__main__":
     model = UNet(n_classes=10)

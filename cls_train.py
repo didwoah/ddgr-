@@ -76,7 +76,7 @@ def eval_classifier(model, dataset_name, class_idx_lst, saver, device = 'cpu'):
 
 def _eval_classifier(model, dataset_name, class_indicies, saver, device):
     _, test_dataset = get_dataset_new_task(dataset_name = dataset_name, class_indicies = class_indicies)
-    loader = get_loader([test_dataset], batch_size=16, saver=saver)
+    loader = get_loader([test_dataset], batch_size=16, curr_classes=None, saver=saver, test=True)
 
     model.eval()
 

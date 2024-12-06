@@ -12,6 +12,8 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
+
+
 def get_task_dataset(dataset, class_indicies):
     indices  = [i for i, (_, label) in enumerate(dataset) if label in class_indicies]
     return Subset(dataset, indices)
@@ -59,7 +61,7 @@ def get_dataset_new_task(dataset_name, class_indicies):
     return get_task_dataset(train_dataset, class_indicies), get_task_dataset(test_dataset, class_indicies)
 
 
-def get_loader(datasets, batch_size, saver, shuffle=True, num_workers=0):
+def get_loader(datasets, batch_size, curr_classes, saver, shuffle=True, num_workers=0, test=False):
 
     if not isinstance(datasets, list) or not all(isinstance(ds, Dataset) for ds in datasets):
         raise ValueError
@@ -67,7 +69,7 @@ def get_loader(datasets, batch_size, saver, shuffle=True, num_workers=0):
         raise ValueError
     
     combined_dataset = ConcatDataset(datasets)
-    dataset = RelabeledDataset(combined_dataset, saver)
+    dataset = RelabeledDataset(combined_dataset, curr_classes, saver, test)
     
     loader = DataLoader(
         dataset,

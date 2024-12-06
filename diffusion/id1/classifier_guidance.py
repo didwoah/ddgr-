@@ -11,9 +11,9 @@ import contextlib
 
 from const import EPSILON
 
-from diffusion.diffusion import Diffusion
+from diffusion.diffusion import DDPM
 
-class ClassifierGuidedDiffusion(Diffusion):
+class ClassifierGuidedDiffusion(DDPM):
 
     def __init__(
         self,

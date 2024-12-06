@@ -142,6 +142,7 @@ class UNet(nn.Module):
             nn.Linear(time_channels, time_channels),
         )
         self.label_emb = nn.Embedding(n_classes, time_channels)
+        self.time_channels = time_channels
 
         self.init_conv = nn.Conv2d(img_channels, channels, 3, 1, 1)
         self.down_blocks = nn.ModuleList()
@@ -201,12 +202,20 @@ class UNet(nn.Module):
             Swish(),
             nn.Conv2d(cur_channels, img_channels, 3, 1, 1)
         )
+        
+    def extend_embedder(self, n_classes, prev_n_classes, device):
+        embedder = nn.Embedding(n_classes, self.time_channels).to(device)
+
+        # weight copy from old embedder to new embedder
+        embedder.weight.data[:prev_n_classes] = self.label_emb.weight.data
+        self.label_emb = embedder
+        
 
     def forward(self, noisy_image, diffusion_step, label):
         x = self.init_conv(noisy_image)
         t = self.time_embed(diffusion_step)
         if label is not None:
-            y = self.label_emb(label)
+            y = self.label_emb(label.long())
         else:
             y = torch.zeros_like(t)
 
