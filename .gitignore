@@ -1,0 +1,12 @@
+
+
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+
+save/
+data/
+
+.vscode/
+.idea/
+*.swp
