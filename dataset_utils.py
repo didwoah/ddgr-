@@ -43,6 +43,12 @@ class RelabeledDataset(Dataset):
             new_label = self.label_map[original_label.item()]
         return data, torch.tensor(original_label), torch.tensor(new_label)
     
+class EmptyDataset(Dataset):
+    def __len__(self):
+        return 0
+    def __getitem__(self, idx):
+        raise IndexError("This dataset is empty.")
+    
 
 def files_in_directory(directory_path):
     # 폴더 내 모든 파일과 디렉토리 가져오기

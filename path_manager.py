@@ -66,9 +66,11 @@ class PathManager():
         assert model in ['classifier', 'generator']
 
         task_root_path = self._get_task_root_path()
-        model_path = os.path.join(task_root_path, model)
+        model_dir_path = os.path.join(task_root_path, model)
 
-        os.makedirs(model_path, exist_ok = True)
+        os.makedirs(model_dir_path, exist_ok = True)
+
+        model_path = os.path.join(model_dir_path, 'weights.pth')
 
         return model_path
     
@@ -101,7 +103,7 @@ class PathManager():
         assert model in ['classifier', 'generator']
 
         task_root_path = self._get_prev_task_root_path()
-        model_path = os.path.join(task_root_path, model)
+        model_path = os.path.join(task_root_path, model, 'weights.pth')
 
         return model_path
 

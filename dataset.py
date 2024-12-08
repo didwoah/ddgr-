@@ -5,14 +5,13 @@ from torch.utils.data import Subset, DataLoader, ConcatDataset, Dataset
 import random
 import os
 
-from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image
+from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image, EmptyDataset
 from diffusion.proposed.ddpm import DiffusionModule
 
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
-
 
 
 def get_task_dataset(dataset, class_indicies):
@@ -68,6 +67,8 @@ def get_loader(datasets, batch_size, curr_classes, saver, shuffle=True, num_work
         raise ValueError
     if len(datasets) == 0:
         raise ValueError
+    
+    datasets = [ds if ds is not None else EmptyDataset() for ds in datasets]
     
     combined_dataset = ConcatDataset(datasets)
     dataset = RelabeledDataset(combined_dataset, curr_classes, saver, test)

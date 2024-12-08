@@ -1,0 +1,233 @@
+import torch
+import torch.nn as nn
+from tqdm import tqdm
+import argparse
+import os
+import json
+
+from dataset import split_task, get_dataset_new_task, get_loader, get_dataset_config, get_generated_dataset
+from classifier.AlexNet.AlexNet import get_new_task_classifier
+from cls_train import task_classifier_train, eval_classifier
+
+from diffusion.proposed.network import UNet
+from diffusion.proposed.cfg import CFGModule
+from diffusion.proposed.dual_sample import DualGuidedModule
+from diffusion.proposed.diffusion_kd import DiffusionKDModule
+from diffusion.proposed.trainer import DiffusionTrainer
+from diffusion.proposed.var_scheduler import Scheduler
+from diffusion.proposed.lr_scheduler import GradualWarmupScheduler
+
+from path_manager import PathManager
+
+from copy import deepcopy
+import diffusion
+import logger as Logger
+
+def main(args, manager : PathManager):
+
+    logger = Logger.FileLogger("./save/experiments0", "log.txt")
+    logger.on()
+
+    if args.dataset == 'cifar100':
+        class_idx_lst = split_task(args.class_nums, 100)
+    elif args.dataset == 'cifar10':
+        class_idx_lst = split_task(args.class_nums, 10)
+
+    dataset_config = get_dataset_config(args.dataset)
+    num_labels = sum(args.class_nums)
+
+    for task in range(len(class_idx_lst)):
+        print(f'task {task} start~')
+
+        new_task_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task])
+
+        if task == 0 and args.pre_train:
+            # setting
+            dataloader = get_loader([new_task_dataset], args.cls_batch_size, class_idx_lst[task], manager)
+
+            # classifier pretraininig
+            cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
+            cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+            cls_network = task_classifier_train(cls_network, dataloader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
+
+            # classifier save
+            save_path = os.path.join(manager.get_model_path('classifier'), 'weights.pth')
+            torch.save(cls_network.state_dict(), save_path)
+
+            # generator pretraining
+            gen_network = UNet(T=args.T, num_labels=num_labels, ch=args.channel, ch_mult=args.channel_mult,
+                     num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
+
+            gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+            cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
+
+            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
+
+            var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
+            cfg_model = CFGModule(gen_network, var_scheduler)
+
+            trainer = DiffusionTrainer(cfg_model, manager)
+
+            trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
+                
+            # generator save
+            save_path = manager.get_model_path('generator')
+            cfg_model.save(save_path)
+
+            manager.update_task_count()
+            continue
+
+        # init netwrok
+        prev_cls_model_path = manager.get_prev_model_path('classifier')
+        cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_cls_model_path, args.head_shared)
+
+        gen_network = UNet(T=args.T, num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
+                     num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
+        gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
+
+        cfg_model = CFGModule(gen_network, var_scheduler)
+
+        # get generated image dataset
+        cfg_model = CFGModule(gen_network, var_scheduler)
+        generated_dataset = get_generated_dataset(
+            cfg_model, 
+            args.num_gen_samples, 
+            args.batch_size, 
+            sum(args.class_nums[:task]), 
+            manager, 
+            args.device)
+        
+        augmented_dataset = None
+        
+        if args.dual_guidance:
+            dual_guided_model = DualGuidedModule(
+                gen_network, 
+                var_scheduler,
+                cls_network,
+                args.cg_factor,
+                args.cfg_factor,
+                args.device)
+            augmented_dataset = get_generated_dataset(
+                dual_guided_model, 
+                args.num_aug_samples, 
+                args.batch_size, 
+                sum(args.class_nums[:task]), 
+                manager, 
+                args.device)
+            
+        
+        # classifier train
+        cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
+
+        cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+        cls_network = task_classifier_train(cls_network, cls_loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
+
+        # eval acc & classifier save
+        eval_classifier(cls_network, args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
+
+        save_path = manager.get_model_path('classifier')
+        torch.save(cls_network.state_dict(), save_path)
+
+        # generator train
+        gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+        cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.epochs, eta_min=0, last_epoch=-1)
+
+        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
+
+        var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
+        cfg_model = CFGModule(gen_network, var_scheduler)
+
+        if args.diffusion_kd:
+            teacher_network = gen_network.copy.deepcopy()
+            kd_model = DiffusionKDModule(
+                gen_network, 
+                var_scheduler, 
+                teacher_network,
+                sum(args.class_nums[:task]),
+                args.kd_sampling_ratio,
+                device = args.device
+                )
+            trainer = DiffusionTrainer(
+                cfg_model,
+                manager,
+                kd_model,
+                args.kd_factor,
+                device = args.device
+            )
+        else:
+            trainer = DiffusionTrainer(cfg_model, manager)
+
+        trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
+            
+        # generator save
+        save_path = manager.get_model_path('generator')
+        cfg_model.save(save_path)
+
+        # eval fid
+        manager.update_task_count()
+
+    logger.off()
+
+
+
+def arg():
+    parser = argparse.ArgumentParser(description="Example of argparse usage")
+
+    # 명령줄 인자 추가
+    parser.add_argument("--dataset", type=str, default="cifar100", choices=["cifar100", "cifar10"], help="dataset name")
+    parser.add_argument("--cls_model", type=str, default="alexnet", choices=["alexnet", "resnet"], help="Choose classifier")
+    
+    parser.add_argument("--diffusion_kd", action="store_true", help="Using distillation or not")
+
+    parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
+    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
+
+    parser.add_argument("--cls_epochs", type=int, default=50, help="Number of epochs of classifier")
+    
+    parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
+
+
+    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
+    parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
+
+
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
+
+    parser.add_argument("--generate_ratio", type=float, default=0.5, help="relative size of generated dataset")
+    parser.add_argument("--lambda_cfg", type=float, default=1, help="weight of classifier free guidance score")
+    parser.add_argument("--lambda_cg", type=float, default=1, help="weight of classifier guidance score")
+
+    parser.add_argument("--class_nums", type=list, default=[20, 20, 20, 20, 20,], help="[50, 5, 5, 5, 5,]")
+
+    parser.add_argument("--map_path", type=str, default="./", help="class map path")
+    parser.add_argument("--head_shared", action="store_true", help="Whether to share classifier head across tasks")
+    parser.add_argument("--pre_train", action="store_true", help="Whether to perform pre-training on task 0")
+
+    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
+
+
+
+    parser.add_argument("--T", type=int, default=500, help="Number of timesteps")
+    parser.add_argument("--channel", type=int, default=128, help="Base number of channels")
+    parser.add_argument("--channel_mult", type=int, nargs='+', default=[1, 2, 2, 2], help="Channel multiplier for each level")
+    parser.add_argument("--num_res_blocks", type=int, default=2, help="Number of residual blocks per level")
+    parser.add_argument("--dropout", type=float, default=0.15, help="Dropout rate")
+    parser.add_argument("--multiplier", type=float, default=2.5, help="Multiplier for diffusion loss")
+    parser.add_argument("--beta_1", type=float, default=1e-4, help="Beta start value for scheduler")
+    parser.add_argument("--beta_T", type=float, default=0.028, help="Beta end value for scheduler")
+    parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
+
+    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")
+    parser.add_argument("--cg_factor", type=float, default=1.8, help="Weight for classifier guidance")
+    parser.add_argument("--kd_sampling_ratio", type=float, default=0.1)
+    parser.add_argument("--kd_factor", type=float, default=1.0)
+
+
+    args.gen_epochs = int(args.iters / (50000 / args.gen_batch_size))
+
+    return args
+
+if __name__ == "__main__":
+    args = arg()
+    saver = PathManager(args)
+    main(args, saver)
