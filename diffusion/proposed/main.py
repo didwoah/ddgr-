@@ -50,7 +50,7 @@ def train(modelConfig):
 
     trainer.train(dataloader, optimizer, modelConfig["iters"], warmUpScheduler)
 
-def eval():
+def eval(modelConfig: Dict):
     pass
 
 def main(model_config=None):

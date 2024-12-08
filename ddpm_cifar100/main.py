@@ -21,7 +21,7 @@ def main(model_config=None):
         "w": 1.8,
         "save_dir": "./save/",
         "training_load_weight": None,
-        "test_load_weight": "ckpt_63_.pt",
+        "test_load_weight": "/home/jmyang/workspace/ddgr-/diffusion/proposed/save/experiments21/task 0/generator/weights.pth",
         "sampled_dir": "./sampled_image/",
         "sampledNoisyImgName": "NoisyGuidenceImgs.png",
         "sampledImgName": "SampledGuidenceImgs.png",
