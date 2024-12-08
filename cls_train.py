@@ -9,14 +9,12 @@ from visualize import plot_task_vs_accuracy
 
 
 def task_classifier_train(
-    model, dataloader, optimzier, epochs = 100, device="cpu", patience=5
+    model, dataloader, optimzier, epochs = 100, device="cuda"
 ):
     criterion = nn.CrossEntropyLoss()
     model.to(device)
 
     progress_bar = tqdm(range(epochs), desc="Training Progress", leave=True)
-    best_accuracy = 0.0
-    no_improvement_epochs = 0
 
     for epoch in progress_bar:
         model.train()
@@ -43,18 +41,7 @@ def task_classifier_train(
         # Update progress bar
         progress_bar.set_postfix(epoch=epoch + 1, loss=f"{avg_loss:.4f}", accuracy=f"{accuracy:.2f}%")
 
-        # Early stopping check
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
-            no_improvement_epochs = 0  # Reset counter
-        else:
-            no_improvement_epochs += 1
-
-        if no_improvement_epochs >= patience:
-            print(f"\nEarly stopping triggered. Best accuracy: {best_accuracy:.2f}%")
-            break
-
-    print("Training completed.")
+    print("Classifier Training completed.")
     return model
 
 def eval_classifier(model, dataset_name, class_idx_lst, saver, device = 'cpu'):

@@ -58,6 +58,6 @@ class DiffusionTrainer():
             if iteration >= iters - 1:
                 break
 
-        save_path = self.path_manager.get_model_path('generator')
+        save_path = self.manager.get_model_path('generator')
         self.module.save(save_path)
 

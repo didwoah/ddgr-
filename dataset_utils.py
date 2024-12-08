@@ -51,9 +51,7 @@ class EmptyDataset(Dataset):
     
 
 def files_in_directory(directory_path):
-    # 폴더 내 모든 파일과 디렉토리 가져오기
     all_items = os.listdir(directory_path)
-    # 파일만 필터링
     files = [f for f in all_items if os.path.isfile(os.path.join(directory_path, f))]
     return files
 
@@ -82,7 +80,6 @@ class ImageFolderDataset(Dataset):
         return int(name.split('_')[-1])
     
     def __getitem__(self, index):
-        # 이미지 로드
         img_path = os.path.join(self.folder_path, self.image_paths[index])
         image = self.transform(Image.open(img_path))
         label = torch.tensor(self.get_label_from_image_path(img_path), dtype=torch.long)

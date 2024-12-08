@@ -184,9 +184,8 @@ def arg():
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
     parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
-    parser.add_argument("--cls_epochs", type=int, default=50, help="Number of epochs of classifier")
-    
-    parser.add_argument("--gen_iters", type=int, default=50000, help="Number of iterations of generator")
+    parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
+    parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
 
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
