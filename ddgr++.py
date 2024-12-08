@@ -31,11 +31,10 @@ def main(args, manager : PathManager):
 
     if args.dataset == 'cifar100':
         class_idx_lst = split_task(args.class_nums, 100)
+        num_labels = 100
     elif args.dataset == 'cifar10':
         class_idx_lst = split_task(args.class_nums, 10)
-
-    dataset_config = get_dataset_config(args.dataset)
-    num_labels = sum(args.class_nums)
+        num_labels = 10
 
     for task in range(len(class_idx_lst)):
         print(f'task {task} start~')
@@ -62,14 +61,14 @@ def main(args, manager : PathManager):
             gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
             cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
-            #warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
+            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
             var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
             cfg_model = CFGModule(gen_network, var_scheduler)
 
             trainer = DiffusionTrainer(cfg_model, manager)
 
-            trainer.train(dataloader, gen_optimizer, args.gen_iters, )#warmUpScheduler)
+            trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
                 
             # generator save
             save_path = manager.get_model_path('generator')
@@ -130,7 +129,7 @@ def main(args, manager : PathManager):
         gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
         cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
-        #warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
+        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
         cfg_model = CFGModule(gen_network, var_scheduler)
@@ -160,7 +159,7 @@ def main(args, manager : PathManager):
         else:
             diff_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.gen_batch_size, class_idx_lst[task], manager)
             
-        trainer.train(diff_loader, gen_optimizer, args.gen_iters, )#warmUpScheduler)
+        trainer.train(diff_loader, gen_optimizer, args.gen_iters, warmUpScheduler)
             
         # generator save
         save_path = manager.get_model_path('generator')
@@ -185,9 +184,9 @@ def arg():
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
     parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
-    parser.add_argument("--cls_epochs", type=int, default=2, help="Number of epochs of classifier")
+    parser.add_argument("--cls_epochs", type=int, default=50, help="Number of epochs of classifier")
     
-    parser.add_argument("--gen_iters", type=int, default=50, help="Number of iterations of generator")
+    parser.add_argument("--gen_iters", type=int, default=50000, help="Number of iterations of generator")
 
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
@@ -196,12 +195,10 @@ def arg():
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
 
-    parser.add_argument("--num_gen_samples", type=int, default=16, help="relative size of generated dataset")
-    parser.add_argument("--num_aug_samples", type=int, default=16, help="relative size of generated dataset")
-    parser.add_argument("--lambda_cfg", type=float, default=1, help="weight of classifier free guidance score")
-    parser.add_argument("--lambda_cg", type=float, default=1, help="weight of classifier guidance score")
+    parser.add_argument("--num_gen_samples", type=int, default=6500, help="relative size of generated dataset")
+    parser.add_argument("--num_aug_samples", type=int, default=1500, help="relative size of generated dataset")
 
-    parser.add_argument("--class_nums", type=list, default=[20, 20, 20, 20, 20,], help="[50, 5, 5, 5, 5,]")
+    parser.add_argument("--class_nums", type=list, default=[50, 5, 5, 5, 5, 5], help="[50, 5, 5, 5, 5,]")
 
     parser.add_argument("--map_path", type=str, default="./", help="class map path")
     parser.add_argument("--head_shared", action="store_true", help="Whether to share classifier head across tasks")
@@ -219,10 +216,10 @@ def arg():
     parser.add_argument("--beta_T", type=float, default=0.028, help="Beta end value for scheduler")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
 
-    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")
-    parser.add_argument("--cg_factor", type=float, default=1.8, help="Weight for classifier guidance")
-    parser.add_argument("--kd_sampling_ratio", type=float, default=0.1)
-    parser.add_argument("--kd_factor", type=float, default=1.0)
+    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
+    parser.add_argument("--cg_factor", type=float, default=-0.3, help="Weight for classifier guidance")         # CG original paper best factor : 0.3
+    parser.add_argument("--kd_sampling_ratio", type=float, default=0.2)
+    parser.add_argument("--kd_factor", type=float, default=1.0)                                                 # LWF original paper best factor : ?
 
     args = parser.parse_args()
     

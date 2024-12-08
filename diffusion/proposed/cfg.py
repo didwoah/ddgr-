@@ -59,7 +59,7 @@ class CFGModule(nn.Module):
             torch.randint(1, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
             .long()
         )
-        noise = torch.randn_like(x_0)
+        noise = torch.randn_like(x_0).to(self.device)
         x_t = self.q_sample(x_0, t, noise)
         eps_theta = self.network(x_t, t, y)
         loss = ((noise - eps_theta)**2.).mean()

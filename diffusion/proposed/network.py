@@ -202,7 +202,6 @@ class UNet(nn.Module):
             Swish(),
             nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
         )
- 
 
     def forward(self, x, t, y, device = 'cuda'):
 
