@@ -6,7 +6,7 @@ from tqdm import tqdm
 import itertools
 import numpy as np
 
-from cfg import CFGModule
+from diffusion.proposed.cfg import CFGModule
 
 class DiffusionTrainer():
     def __init__(
@@ -30,12 +30,12 @@ class DiffusionTrainer():
         loader_cycle = itertools.cycle(loader)
 
         for iteration in pbar:
-            x, y = next(loader_cycle)
+            x, _, y = next(loader_cycle)
             x = x.to(self.device)
             y = y.to(self.device)
 
             if np.random.rand() < 0.1:
-                    y = None
+                y = torch.fill(y, 100)
 
             optimizer.zero_grad()
             loss = self.module.loss_function(x, y) 
@@ -58,6 +58,6 @@ class DiffusionTrainer():
             if iteration >= iters - 1:
                 break
 
-        save_path = os.path.join(self.manager.get_model_path('generator'), 'weights.pth')
+        save_path = self.path_manager.get_model_path('generator')
         self.module.save(save_path)
 
