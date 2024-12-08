@@ -12,14 +12,14 @@ class DiffusionTrainer():
     def __init__(
             self,
             module: CFGModule,
-            path_manager,
+            manager,
             kd_module = None,
             kd_factor = 0.,
             device = 'cuda'
             ):
         self.module = module
         self.kd_module = kd_module
-        self.path_manager = path_manager
+        self.manager = manager
         self.kd_factor = kd_factor
         self.device = device
 
