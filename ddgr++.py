@@ -25,6 +25,7 @@ import logger as Logger
 
 def main(args, manager : PathManager):
 
+    gen_epochs = int(args.gen_iters / (50000 / args.gen_batch_size))
     logger = Logger.FileLogger("./save/experiments0", "log.txt")
     logger.on()
 
@@ -51,7 +52,7 @@ def main(args, manager : PathManager):
             cls_network = task_classifier_train(cls_network, dataloader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
             # classifier save
-            save_path = os.path.join(manager.get_model_path('classifier'), 'weights.pth')
+            save_path = manager.get_model_path('classifier')
             torch.save(cls_network.state_dict(), save_path)
 
             # generator pretraining
@@ -59,16 +60,16 @@ def main(args, manager : PathManager):
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
 
             gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
-            cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
+            cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
-            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
+            #warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
             var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
             cfg_model = CFGModule(gen_network, var_scheduler)
 
             trainer = DiffusionTrainer(cfg_model, manager)
 
-            trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
+            trainer.train(dataloader, gen_optimizer, args.gen_iters, )#warmUpScheduler)
                 
             # generator save
             save_path = manager.get_model_path('generator')
@@ -79,20 +80,18 @@ def main(args, manager : PathManager):
 
         # init netwrok
         prev_cls_model_path = manager.get_prev_model_path('classifier')
-        cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_cls_model_path, args.head_shared)
+        cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_cls_model_path, args.head_shared, device=args.device)
 
         gen_network = UNet(T=args.T, num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
         gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
 
-        cfg_model = CFGModule(gen_network, var_scheduler)
-
         # get generated image dataset
         cfg_model = CFGModule(gen_network, var_scheduler)
         generated_dataset = get_generated_dataset(
             cfg_model, 
-            args.num_gen_samples, 
-            args.batch_size, 
+            args.num_gen_samples,
+            args.gen_batch_size, 
             sum(args.class_nums[:task]), 
             manager, 
             args.device)
@@ -110,12 +109,11 @@ def main(args, manager : PathManager):
             augmented_dataset = get_generated_dataset(
                 dual_guided_model, 
                 args.num_aug_samples, 
-                args.batch_size, 
+                args.gen_batch_size, 
                 sum(args.class_nums[:task]), 
                 manager, 
                 args.device)
             
-        
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
 
@@ -130,15 +128,15 @@ def main(args, manager : PathManager):
 
         # generator train
         gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
-        cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.epochs, eta_min=0, last_epoch=-1)
+        cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
-        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
+        #warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
         cfg_model = CFGModule(gen_network, var_scheduler)
 
         if args.diffusion_kd:
-            teacher_network = gen_network.copy.deepcopy()
+            teacher_network = deepcopy(gen_network)
             kd_model = DiffusionKDModule(
                 gen_network, 
                 var_scheduler, 
@@ -157,7 +155,12 @@ def main(args, manager : PathManager):
         else:
             trainer = DiffusionTrainer(cfg_model, manager)
 
-        trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
+        if args.diffusion_kd:
+            diff_loader = get_loader([new_task_dataset], args.gen_batch_size, class_idx_lst[task], manager)
+        else:
+            diff_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.gen_batch_size, class_idx_lst[task], manager)
+            
+        trainer.train(diff_loader, gen_optimizer, args.gen_iters, )#warmUpScheduler)
             
         # generator save
         save_path = manager.get_model_path('generator')
@@ -182,9 +185,9 @@ def arg():
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
     parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
-    parser.add_argument("--cls_epochs", type=int, default=50, help="Number of epochs of classifier")
+    parser.add_argument("--cls_epochs", type=int, default=2, help="Number of epochs of classifier")
     
-    parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
+    parser.add_argument("--gen_iters", type=int, default=50, help="Number of iterations of generator")
 
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
@@ -193,7 +196,8 @@ def arg():
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
 
-    parser.add_argument("--generate_ratio", type=float, default=0.5, help="relative size of generated dataset")
+    parser.add_argument("--num_gen_samples", type=int, default=16, help="relative size of generated dataset")
+    parser.add_argument("--num_aug_samples", type=int, default=16, help="relative size of generated dataset")
     parser.add_argument("--lambda_cfg", type=float, default=1, help="weight of classifier free guidance score")
     parser.add_argument("--lambda_cg", type=float, default=1, help="weight of classifier guidance score")
 
@@ -203,9 +207,7 @@ def arg():
     parser.add_argument("--head_shared", action="store_true", help="Whether to share classifier head across tasks")
     parser.add_argument("--pre_train", action="store_true", help="Whether to perform pre-training on task 0")
 
-    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
-
-
+    parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
 
     parser.add_argument("--T", type=int, default=500, help="Number of timesteps")
     parser.add_argument("--channel", type=int, default=128, help="Base number of channels")
@@ -222,9 +224,8 @@ def arg():
     parser.add_argument("--kd_sampling_ratio", type=float, default=0.1)
     parser.add_argument("--kd_factor", type=float, default=1.0)
 
-
-    args.gen_epochs = int(args.iters / (50000 / args.gen_batch_size))
-
+    args = parser.parse_args()
+    
     return args
 
 if __name__ == "__main__":

@@ -57,7 +57,7 @@ class PathManager():
         return root_path
     
     def _get_task_root_path(self):
-        task_root_path = os.path.join(self.__root_path, f'task {self.__now_task}')
+        task_root_path = os.path.join(self.__root_path, f'task{self.__now_task}')
         os.makedirs(task_root_path, exist_ok = True)
 
         return task_root_path
@@ -71,7 +71,7 @@ class PathManager():
         os.makedirs(model_dir_path, exist_ok = True)
 
         model_path = os.path.join(model_dir_path, 'weights.pth')
-
+        
         return model_path
     
     def get_image_path(self):
@@ -94,7 +94,7 @@ class PathManager():
 
     def _get_prev_task_root_path(self):
         assert self.__now_task > 0
-        task_root_path = os.path.join(self.__root_path, f'task {self.__now_task - 1}')
+        task_root_path = os.path.join(self.__root_path, f'task{self.__now_task - 1}')
         os.makedirs(task_root_path, exist_ok = True)
 
         return task_root_path

@@ -4,9 +4,10 @@ from torchvision import datasets, transforms
 from torch.utils.data import Subset, DataLoader, ConcatDataset, Dataset
 import random
 import os
+from tqdm import tqdm
 
 from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image, EmptyDataset
-from diffusion.proposed.ddpm import DiffusionModule
+from diffusion.proposed.cfg import CFGModule
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -63,9 +64,7 @@ def get_dataset_new_task(dataset_name, class_indicies):
 
 def get_loader(datasets, batch_size, curr_classes, saver, shuffle=True, num_workers=0, test=False):
 
-    if not isinstance(datasets, list) or not all(isinstance(ds, Dataset) for ds in datasets):
-        raise ValueError
-    if len(datasets) == 0:
+    if not isinstance(datasets, list) or len(datasets) == 0:
         raise ValueError
     
     datasets = [ds if ds is not None else EmptyDataset() for ds in datasets]
@@ -140,7 +139,7 @@ DATASET_CONFIGS = {
 
 
 def get_generated_dataset(
-        generator: DiffusionModule, 
+        generator: CFGModule, 
         num_samples, 
         batch_size, 
         num_prev_labels, 
@@ -153,17 +152,18 @@ def get_generated_dataset(
     map = manager.get_map()
     inverse_map = {value: key for key, value in map.items()}
 
-    labels = torch.randint(0, num_prev_labels, (num_samples, 1), device=device)
+    labels = torch.randint(0, num_prev_labels, (num_samples,), device=device)
+    
     org_labels = [inverse_map[label.item()] for label in labels]
 
     num_batches = (num_samples + batch_size - 1) // batch_size
 
-    for i in range(num_batches):
+    for i in tqdm(range(num_batches), desc="Generating Batches", unit="batch"):
         start_idx = i * batch_size
         end_idx = min(start_idx + batch_size, num_samples)
         batch_labels = labels[start_idx:end_idx]
 
-        shape = (end_idx - start_idx, 3, 32, 32)
+        shape = ((end_idx - start_idx), 3, 32, 32)
         images = generator.sample(shape, batch_labels)
 
         for image, label in zip(images, org_labels):

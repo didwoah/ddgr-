@@ -42,7 +42,7 @@ class TimeEmbedding(nn.Module):
         )
 
     def forward(self, t):
-        emb = self.timembedding(t)
+        emb = self.timembedding(t.long())
         return emb
 
 
@@ -58,7 +58,7 @@ class ConditionalEmbedding(nn.Module):
         )
 
     def forward(self, t):
-        emb = self.condEmbedding(t)
+        emb = self.condEmbedding(t.long())
         return emb
 
 
@@ -204,13 +204,11 @@ class UNet(nn.Module):
         )
  
 
-    def forward(self, x, t, labels, device = 'cuda'):
+    def forward(self, x, t, y, device = 'cuda'):
 
-        if labels is None:
-            labels = torch.full((x.shape[0],), self.num_labels).to(device)
         # Timestep embedding
-        temb = self.time_embedding(t)
-        cemb = self.cond_embedding(labels)
+        temb = self.time_embedding(t.long())
+        cemb = self.cond_embedding(y)
         # Downsampling
         h = self.head(x)
         hs = [h]

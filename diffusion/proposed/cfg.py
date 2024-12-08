@@ -29,28 +29,26 @@ class CFGModule(nn.Module):
     
     @torch.no_grad()
     def p_sample(self, x_t, t, y):
-
-        if isinstance(t, int):
-            t = torch.tensor([t]).to(self.device)
-
         eps_factor = (1 - extract(self.var_scheduler.alphas, t)) / (
             1 - extract(self.var_scheduler.alphas_cumprod, t)
         ).sqrt()
 
-        noise = torch.randn_like(x_t)
+        noise = torch.randn_like(x_t).to(self.device)
 
         noise_factor = (
-            (1 - extract(self.var_scheduler.alphas_cumprod, t-1)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.scheduler.betas, t)
+            (1 - extract(self.var_scheduler.alphas_cumprod, t-1)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         ).sqrt()
-        t_expanded = t[:, None]
+        t_expanded = t[:, None, None, None]
         noise_factor = torch.where(t_expanded>1, noise_factor, torch.zeros_like(noise_factor))
-
-        eps_no_cond = self.network(x_t, t, None)
+        # edit required
+        no_cond = torch.fill(y, 100).to(self.device)
+        
+        eps_no_cond = self.network(x_t, t, no_cond)
         eps_cond = self.network(x_t, t, y)
+        
         cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
 
         mean = (x_t - eps_factor * cfg_eps) / extract(self.var_scheduler.alphas, t).sqrt()
-
         x_t_prev = mean + noise_factor * noise
 
         return x_t_prev
@@ -58,7 +56,7 @@ class CFGModule(nn.Module):
     def loss_function(self, x_0, y):
         batch_size = x_0.shape[0]
         t = (
-            torch.randint(0, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
+            torch.randint(1, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
             .long()
         )
         noise = torch.randn_like(x_0)
@@ -71,10 +69,10 @@ class CFGModule(nn.Module):
     @torch.no_grad()
     def sample(self, x_shape, y):
         # x_shape: (batch_size, c_dim, h_dim, w_dim)
-        x = torch.randn(x_shape)
+        x = torch.randn(x_shape).to(self.device)
         batch_size = x_shape[0]
 
-        for time_step in reversed(range(self.var_scheduler.num_steps)):
+        for time_step in reversed(range(1, self.var_scheduler.num_steps)):
             t = torch.ones(size = (batch_size,)) * time_step
             t = t.to(self.device)
             x = self.p_sample(x, t, y)
