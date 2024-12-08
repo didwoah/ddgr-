@@ -13,13 +13,13 @@ from cls_train import task_classifier_train, eval_classifier
 from diffusion.id12.method import Id12Method
 from diffusion.id12.model import Id12
 from diffusion.id12.network import UNet
-from saver import Saver
+from path_manager import PathManager
 
 from copy import deepcopy
 import diffusion
 import logger as Logger
 
-def main(args, saver : Saver):
+def main(args, saver : PathManager):
 
     logger = Logger.FileLogger("./save/experiments0", "log.txt")
     logger.on()
@@ -135,7 +135,7 @@ def main(args, saver : Saver):
             total_size=int(len(new_task_dataset)*args.generate_ratio),
             batch_size=args.gen_batch_size,
             label_pool=prev_classes,
-            saver=saver,
+            manager=saver,
             device=args.device) #
         
 
@@ -227,5 +227,5 @@ def arg():
 
 if __name__ == "__main__":
     args = arg()
-    saver = Saver(args)
+    saver = PathManager(args)
     main(args, saver)

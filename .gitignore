@@ -113,3 +113,6 @@ log/
 todo.txt
 data/
 save/
+CIFAR10/
+CIFAR100/
+sampled_image/

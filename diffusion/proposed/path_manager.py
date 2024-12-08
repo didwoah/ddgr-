@@ -1,7 +1,7 @@
 import os
 import json
 
-class Saver():
+class PathManager():
     def __init__(self, args, base_path="./save", map_path = None):
         self.base_path = base_path
         self.__root_path = self.create_root_path()
@@ -29,8 +29,15 @@ class Saver():
     def _save_args_to_file(self, args, file_path="args.txt"):
 
         file_path = os.path.join(self.__root_path, file_path)
+
         with open(file_path, "w") as file:
-            json.dump(vars(args), file, indent=4)
+            if hasattr(args, '__dict__'):
+                json.dump(vars(args), file, indent=4)
+            elif isinstance(args, dict):
+                json.dump(args, file, indent=4)
+            else:
+                raise TypeError("Provided 'args' is not serializable and does not have __dict__.")
+
 
     def create_root_path(self):
         """

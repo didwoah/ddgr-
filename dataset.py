@@ -6,6 +6,7 @@ import random
 import os
 
 from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image
+from diffusion.proposed.ddpm import DiffusionModule
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -80,11 +81,12 @@ def get_loader(datasets, batch_size, curr_classes, saver, shuffle=True, num_work
 
     return loader
 
-def get_generate_dataset(folder_path, generator, total_size, batch_size, label_pool, saver, device) -> ImageFolderDataset:
+def get_generate_dataset(generator, total_size, batch_size, label_pool, manager, device) -> ImageFolderDataset:
 
+    folder_path = manager.get_image_path()
     file_index = 0
 
-    map = saver.get_map()
+    map = manager.get_map()
 
     batch_schedule = [batch_size] * (total_size//batch_size) + [total_size%batch_size]
 
@@ -134,3 +136,39 @@ DATASET_CONFIGS = {
     'cifar100': {'size': 32, 'channels': 3, 'classes': 100},
     'svhn': {'size': 32, 'channels': 3, 'classes': 10},
 }
+
+
+def get_generated_dataset(
+        generator: DiffusionModule, 
+        num_samples, 
+        batch_size, 
+        num_prev_labels, 
+        manager, 
+        device) -> ImageFolderDataset:
+
+    folder_path = manager.get_image_path()
+    file_index = 0
+
+    map = manager.get_map()
+    inverse_map = {value: key for key, value in map.items()}
+
+    labels = torch.randint(0, num_prev_labels, (num_samples, 1), device=device)
+    org_labels = [inverse_map[label.item()] for label in labels]
+
+    num_batches = (num_samples + batch_size - 1) // batch_size
+
+    for i in range(num_batches):
+        start_idx = i * batch_size
+        end_idx = min(start_idx + batch_size, num_samples)
+        batch_labels = labels[start_idx:end_idx]
+
+        shape = (end_idx - start_idx, 3, 32, 32)
+        images = generator.sample(shape, batch_labels)
+
+        for image, label in zip(images, org_labels):
+            file_name = f"{file_index}_{label}.png"
+            save_as_image(image, os.path.join(folder_path, file_name))
+
+            file_index += 1
+
+    return ImageFolderDataset(folder_path=folder_path)
