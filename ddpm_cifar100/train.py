@@ -88,9 +88,8 @@ def eval(modelConfig: Dict):
         print("labels: ", labels)
         model = UNet(T=modelConfig["T"], num_labels=100, ch=modelConfig["channel"], ch_mult=modelConfig["channel_mult"],
                      num_res_blocks=modelConfig["num_res_blocks"], dropout=modelConfig["dropout"]).to(device)
-        ckpt = torch.load(os.path.join(
-            modelConfig["save_dir"], modelConfig["test_load_weight"]), map_location=device)
-        model.load_state_dict(ckpt)
+
+        model.load_state_dict(torch.load(modelConfig['test_load_weight']))
         print("model load weight done.")
         model.eval()
         sampler = GaussianDiffusionSampler(
