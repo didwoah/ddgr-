@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 import torch
 from torchvision.transforms import ToPILImage, ToTensor
 from PIL import Image
+from dataset import TRANSFORM
 
 def _get_map(curr_classes, saver):
 
@@ -70,7 +71,7 @@ class ImageFolderDataset(Dataset):
         self.folder_path = folder_path
         self.image_paths = files_in_directory(folder_path)
 
-        self.transform = ToTensor()
+        self.transform = TRANSFORM
 
     def __len__(self):
          return len(self.image_paths)

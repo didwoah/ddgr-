@@ -9,7 +9,7 @@ from tqdm import tqdm
 from dataset_utils import RelabeledDataset, ImageFolderDataset, save_as_image, EmptyDataset
 from diffusion.proposed.cfg import CFGModule
 
-transform = transforms.Compose([
+TRANSFORM = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
@@ -38,13 +38,13 @@ def get_dataset(dataset_name):
             root="./data",
             train=True,
             download=True,
-            transform=transforms.ToTensor()
+            transform=TRANSFORM
         )
         test_dataset = datasets.CIFAR100(
             root="./data",
             train=False,
             download=True,
-            transform=transforms.ToTensor()
+            transform=TRANSFORM
         )
 
     elif dataset_name == 'imagenet':

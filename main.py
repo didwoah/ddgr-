@@ -179,7 +179,12 @@ def arg():
     parser.add_argument("--dataset", type=str, default="cifar100", choices=["cifar100", "cifar10"], help="dataset name")
     parser.add_argument("--cls_model", type=str, default="alexnet", choices=["alexnet", "resnet"], help="Choose classifier")
     
+    # Important
+    parser.add_argument("--ddim", action="store_true", help="DDIM sampling enable")
     parser.add_argument("--diffusion_kd", action="store_true", help="Using distillation or not")
+    parser.add_argument("--pre_train", action="store_true", help="Whether to perform pre-training on task 0")
+    parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
+
 
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
     parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
@@ -187,7 +192,6 @@ def arg():
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
 
-    parser.add_argument("--ddim", action="store_true", help="DDIM sampling enable")
     parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
@@ -204,9 +208,6 @@ def arg():
 
     parser.add_argument("--map_path", type=str, default="./", help="class map path")
     parser.add_argument("--head_shared", action="store_true", help="Whether to share classifier head across tasks")
-    parser.add_argument("--pre_train", action="store_true", help="Whether to perform pre-training on task 0")
-
-    parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
 
     parser.add_argument("--T", type=int, default=500, help="Number of timesteps")
     parser.add_argument("--channel", type=int, default=128, help="Base number of channels")
