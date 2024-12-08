@@ -106,7 +106,7 @@ class CFGModule(nn.Module):
             else:
                 x = self.p_sample(x, t, y)
 
-        return x
+        return torch.clip(x, -1, 1)
     
     def save(self, save_path):
         torch.save(self.network.state_dict(), save_path)
