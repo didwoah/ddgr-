@@ -9,11 +9,12 @@ def extract(input, index):
     return torch.gather(input, 0 ,index).view(index.shape[0], 1, 1, 1)
 
 class CFGModule(nn.Module):
-    def __init__(self, network, var_scheduler, cfg_factor = 1.8, device = 'cuda'):
+    def __init__(self, network, var_scheduler, ddim=False, cfg_factor = 1.8, device = 'cuda'):
         super().__init__()
         self.network = network
         self.var_scheduler = var_scheduler
         self.cfg_factor = cfg_factor
+        self.ddim = ddim
         self.device = device
 
     @torch.no_grad()
@@ -52,6 +53,32 @@ class CFGModule(nn.Module):
         x_t_prev = mean + noise_factor * noise
 
         return x_t_prev
+
+    @torch.no_grad()
+    def p_sample_ddim(self, x_t, t, y):
+
+        alpha = extract(self.var_scheduler.alphas_cumprod, t)
+        prev_alpha = extract(self.var_scheduler.alphas_cumprod, t-1)
+
+        noise = torch.randn_like(x_t).to(self.device)
+    
+        var = self.var_scheduler.eta * ((1 - prev_alpha) / (1 - alpha) * (1 - alpha) / prev_alpha)
+        
+        t_expanded = t[:, None, None, None]
+        
+        var = torch.where(t_expanded>1, var, torch.zeros_like(var))
+        # edit required
+        no_cond = torch.fill(y, 100).to(self.device)
+        
+        eps_no_cond = self.network(x_t, t, no_cond)
+        eps_cond = self.network(x_t, t, y)
+        
+        cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
+
+        mean = prev_alpha.sqrt() * (x_t - ((1 - alpha) / alpha).sqrt()*cfg_eps) + (1 - prev_alpha - var) * cfg_eps
+        x_t_prev = mean + var.sqrt() * noise
+
+        return x_t_prev
     
     def loss_function(self, x_0, y):
         batch_size = x_0.shape[0]
@@ -72,10 +99,12 @@ class CFGModule(nn.Module):
         x = torch.randn(x_shape).to(self.device)
         batch_size = x_shape[0]
 
-        for time_step in reversed(range(1, self.var_scheduler.num_steps)):
-            t = torch.ones(size = (batch_size,)) * time_step
-            t = t.to(self.device)
-            x = self.p_sample(x, t, y)
+        for time_step in reversed(self.var_scheduler.timesteps):
+            t = torch.full((batch_size,), time_step, device=self.device, dtype=torch.long)
+            if self.ddim:
+                x = self.p_sample_ddim(x, t, y)
+            else:
+                x = self.p_sample(x, t, y)
 
         return x
     

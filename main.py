@@ -14,7 +14,7 @@ from diffusion.proposed.cfg import CFGModule
 from diffusion.proposed.dual_sample import DualGuidedModule
 from diffusion.proposed.diffusion_kd import DiffusionKDModule
 from diffusion.proposed.trainer import DiffusionTrainer
-from diffusion.proposed.var_scheduler import Scheduler
+from diffusion.proposed.var_scheduler import DDPMScheduler, DDIMScheduler
 from diffusion.proposed.lr_scheduler import GradualWarmupScheduler
 
 from path_manager import PathManager
@@ -63,8 +63,8 @@ def main(args, manager : PathManager):
 
             warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
-            var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
-            cfg_model = CFGModule(gen_network, var_scheduler)
+            var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
+            cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
 
             trainer = DiffusionTrainer(cfg_model, manager)
 
@@ -86,7 +86,7 @@ def main(args, manager : PathManager):
         gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
 
         # get generated image dataset
-        cfg_model = CFGModule(gen_network, var_scheduler)
+        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
         generated_dataset = get_generated_dataset(
             cfg_model, 
             args.num_gen_samples,
@@ -131,8 +131,8 @@ def main(args, manager : PathManager):
 
         warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
 
-        var_scheduler = Scheduler(args.T, args.beta_1, args.beta_T)
-        cfg_model = CFGModule(gen_network, var_scheduler)
+        var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
+        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
 
         if args.diffusion_kd:
             teacher_network = deepcopy(gen_network)
@@ -187,6 +187,9 @@ def arg():
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
 
+    parser.add_argument("--ddim", action="store_true", help="DDIM sampling enable")
+    parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
+    parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
     parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
     parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
