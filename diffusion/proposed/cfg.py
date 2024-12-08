@@ -29,7 +29,7 @@ class CFGModule(nn.Module):
         return x_t
     
     @torch.no_grad()
-    def p_sample(self, x_t, t, y):
+    def p_sample(self, x_t, prev_t, t, y):
         eps_factor = (1 - extract(self.var_scheduler.alphas, t)) / (
             1 - extract(self.var_scheduler.alphas_cumprod, t)
         ).sqrt()
@@ -37,16 +37,16 @@ class CFGModule(nn.Module):
         noise = torch.randn_like(x_t).to(self.device)
 
         noise_factor = (
-            (1 - extract(self.var_scheduler.alphas_cumprod, t-1)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
+            (1 - extract(self.var_scheduler.alphas_cumprod, prev_t)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         ).sqrt()
         t_expanded = t[:, None, None, None]
         noise_factor = torch.where(t_expanded>1, noise_factor, torch.zeros_like(noise_factor))
+        
+        eps_cond = self.network(x_t, t, y)
         # edit required
         no_cond = torch.fill(y, 100).to(self.device)
-        
         eps_no_cond = self.network(x_t, t, no_cond)
-        eps_cond = self.network(x_t, t, y)
-        
+
         cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
 
         mean = (x_t - eps_factor * cfg_eps) / extract(self.var_scheduler.alphas, t).sqrt()
@@ -55,10 +55,10 @@ class CFGModule(nn.Module):
         return x_t_prev
 
     @torch.no_grad()
-    def p_sample_ddim(self, x_t, t, y):
+    def p_sample_ddim(self, x_t, prev_t, t, y):
 
         alpha = extract(self.var_scheduler.alphas_cumprod, t)
-        prev_alpha = extract(self.var_scheduler.alphas_cumprod, t-1)
+        prev_alpha = extract(self.var_scheduler.alphas_cumprod, prev_t)
 
         noise = torch.randn_like(x_t).to(self.device)
     
@@ -67,15 +67,15 @@ class CFGModule(nn.Module):
         t_expanded = t[:, None, None, None]
         
         var = torch.where(t_expanded>1, var, torch.zeros_like(var))
+
+        eps_cond = self.network(x_t, t, y)
         # edit required
         no_cond = torch.fill(y, 100).to(self.device)
-        
         eps_no_cond = self.network(x_t, t, no_cond)
-        eps_cond = self.network(x_t, t, y)
         
         cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
 
-        mean = prev_alpha.sqrt() * (x_t - ((1 - alpha) / alpha).sqrt()*cfg_eps) + (1 - prev_alpha - var) * cfg_eps
+        mean = prev_alpha.sqrt() / alpha.sqrt() * (x_t - ((1 - alpha).sqrt()*cfg_eps)) + (1 - prev_alpha - var).sqrt() * cfg_eps
         x_t_prev = mean + var.sqrt() * noise
 
         return x_t_prev
@@ -98,13 +98,16 @@ class CFGModule(nn.Module):
         # x_shape: (batch_size, c_dim, h_dim, w_dim)
         x = torch.randn(x_shape).to(self.device)
         batch_size = x_shape[0]
-
-        for time_step in reversed(self.var_scheduler.timesteps):
+        
+        timesteps = self.var_scheduler.timesteps
+        prev_timesteps = [0] + self.var_scheduler.timesteps[:-1]
+        for prev_timestep, time_step in zip(reversed(prev_timesteps), reversed(timesteps)):
+            prev_t = torch.full((batch_size,), prev_timestep, device=self.device, dtype=torch.long)
             t = torch.full((batch_size,), time_step, device=self.device, dtype=torch.long)
             if self.ddim:
-                x = self.p_sample_ddim(x, t, y)
+                x = self.p_sample_ddim(x, prev_t, t, y)
             else:
-                x = self.p_sample(x, t, y)
+                x = self.p_sample(x, prev_t, t, y)
 
         return torch.clip(x, -1, 1)
     

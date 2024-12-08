@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from diffusion.proposed.cfg import extract, CFGModule
 
 class DualGuidedModule(CFGModule):
-    def __init__(self, network, var_scheduler, classifier_network, cg_factor, cfg_factor = 1.8, device = 'cuda'):
-        super().__init__(network, var_scheduler, cfg_factor, device)
+    def __init__(self, network, var_scheduler, classifier_network, ddim=False, cg_factor=-1.8, cfg_factor = 1.8, device = 'cuda'):
+        super().__init__(network, var_scheduler, ddim, cfg_factor, device)
         self.classifier_network = classifier_network
         self.cg_factor = cg_factor
 
@@ -23,12 +23,10 @@ class DualGuidedModule(CFGModule):
         selected = log_prob[torch.arange(log_prob.size(0), dtype=torch.long), y.long()]
 
         return torch.autograd.grad(outputs=selected.sum(), inputs=x)[0]
+ 
     
     @torch.no_grad()
-    def p_sample(self, x_t, t, y):
-
-        if isinstance(t, int):
-            t = torch.tensor([t]).to(self.device)
+    def p_sample(self, x_t, prev_t, t, y):
 
         eps_factor = (1 - extract(self.var_scheduler.alphas, t)) / (
             1 - extract(self.var_scheduler.alphas_cumprod, t)
@@ -37,16 +35,16 @@ class DualGuidedModule(CFGModule):
         noise = torch.randn_like(x_t)
 
         var = (
-            (1 - extract(self.var_scheduler.alphas_cumprod, t-1)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
+            (1 - extract(self.var_scheduler.alphas_cumprod, prev_t)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         )
         t_expanded = t[:, None, None, None]
         var = torch.where(t_expanded>1, var, torch.zeros_like(var))
         noise_factor = var.sqrt()
-        # edit required
-        no_cond = torch.fill(y, 100)
-
-        eps_no_cond = self.network(x_t, t, no_cond)
+        
         eps_cond = self.network(x_t, t, y)
+        # edit required
+        no_cond = torch.fill(y, 100).to(self.device)
+        eps_no_cond = self.network(x_t, t, no_cond)
         cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
 
         classifier_score = self.get_classifier_score(x_t, t, eps_no_cond, y)
@@ -55,6 +53,37 @@ class DualGuidedModule(CFGModule):
 
         mean = (x_t - eps_factor * cfg_eps) / extract(self.var_scheduler.alphas, t).sqrt() + score_term
 
+        x_t_prev = mean + noise_factor * noise
+
+        return x_t_prev
+    
+    @torch.no_grad()
+    def p_sample_ddim(self, x_t, prev_t, t, y):
+
+        alpha = extract(self.var_scheduler.alphas_cumprod, t)
+        prev_alpha = extract(self.var_scheduler.alphas_cumprod, prev_t)
+
+        noise = torch.randn_like(x_t).to(self.device)
+    
+        var = self.var_scheduler.eta * ((1 - prev_alpha) / (1 - alpha) * (1 - alpha) / prev_alpha)
+        
+        t_expanded = t[:, None, None, None]
+        
+        var = torch.where(t_expanded>1, var, torch.zeros_like(var))
+        noise_factor = var.sqrt()
+        
+        eps_cond = self.network(x_t, t, y)
+        # edit required
+        no_cond = torch.fill(y, 100).to(self.device)
+        eps_no_cond = self.network(x_t, t, no_cond)
+        
+        cfg_eps = (1. + self.cfg_factor) * eps_cond - self.cfg_factor * eps_no_cond
+
+        classifier_score = self.get_classifier_score(x_t, t, eps_no_cond, y)
+
+        score_term = self.cg_factor * var * classifier_score
+        
+        mean = prev_alpha.sqrt() / alpha.sqrt() * (x_t - ((1 - alpha).sqrt()*cfg_eps)) + (1 - prev_alpha - var).sqrt() * cfg_eps + score_term
         x_t_prev = mean + noise_factor * noise
 
         return x_t_prev
