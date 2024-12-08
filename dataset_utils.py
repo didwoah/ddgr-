@@ -5,7 +5,12 @@ from torch.utils.data import Dataset
 import torch
 from torchvision.transforms import ToPILImage, ToTensor
 from PIL import Image
-from dataset import TRANSFORM
+from torchvision import transforms
+
+TRANSFORM = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 
 def _get_map(curr_classes, saver):
 
