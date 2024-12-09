@@ -83,7 +83,7 @@ class CFGModule(nn.Module):
     def loss_function(self, x_0, y):
         batch_size = x_0.shape[0]
         t = (
-            torch.randint(1, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
+            torch.randint(0, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
             .long()
         )
         noise = torch.randn_like(x_0).to(self.device)
