@@ -20,7 +20,6 @@ from diffusion.proposed.lr_scheduler import GradualWarmupScheduler
 from path_manager import PathManager
 
 from copy import deepcopy
-import diffusion
 import logger as Logger
 
 def main(args, manager : PathManager):
@@ -191,7 +190,7 @@ def arg():
     parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
 
 
-    parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
+    parser.add_argument("--cls_batch_size", type=int, default=64, help="Batch size for training classifier")
     parser.add_argument("--gen_batch_size", type=int, default=64, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
@@ -224,7 +223,7 @@ def arg():
     parser.add_argument("--beta_T", type=float, default=0.028, help="Beta end value for scheduler")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
 
-    parser.add_argument("--cfg_factor", type=float, default=5.0, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
+    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
     parser.add_argument("--cg_factor", type=float, default=-0.3, help="Weight for classifier guidance")         # CG original paper best factor : 0.3
     parser.add_argument("--kd_sampling_ratio", type=float, default=0.2)
     parser.add_argument("--kd_factor", type=float, default=1.0)                                                 # LWF original paper best factor : ?
