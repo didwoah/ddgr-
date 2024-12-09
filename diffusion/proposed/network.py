@@ -50,15 +50,16 @@ class ConditionalEmbedding(nn.Module):
     def __init__(self, num_labels, d_model, dim):
         assert d_model % 2 == 0
         super().__init__()
-        self.condEmbedding = nn.Sequential(
-            nn.Embedding(num_embeddings=num_labels + 1, embedding_dim=d_model, padding_idx=0),
+        self.embedding = nn.Embedding(num_embeddings=num_labels + 1, embedding_dim=d_model, padding_idx=0)
+        self.out = nn.Sequential(
             nn.Linear(d_model, dim),
             Swish(),
             nn.Linear(dim, dim),
         )
 
     def forward(self, t):
-        emb = self.condEmbedding(t.long())
+        emb = self.embedding(t.long())
+        emb = self.out(emb)
         return emb
 
 
@@ -162,9 +163,10 @@ class ResBlock(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
+    def __init__(self, T, num_prev_labels, num_labels, ch, ch_mult, num_res_blocks, dropout):
         super().__init__()
         tdim = ch * 4
+        self.num_prev_labels = num_prev_labels
         self.num_labels = num_labels
         self.time_embedding = TimeEmbedding(T, ch, tdim)
         self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
@@ -202,6 +204,21 @@ class UNet(nn.Module):
             Swish(),
             nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
         )
+        
+        # freezing previous embedding layer
+        self._freeze_embedding(self.num_prev_labels)
+        
+    
+    def _freeze_embedding(self, num_prev_labels):
+        from copy import deepcopy
+        new_embedding = deepcopy(self.cond_embedding.embedding)
+
+        def hook_fn(grad):
+            grad[:num_prev_labels] = 0  # 특정 범위의 Gradient를 제거
+            return grad
+        
+        new_embedding.weight.register_hook(hook_fn)
+        self.cond_embedding.embedding = new_embedding
 
     def forward(self, x, t, y, device = 'cuda'):
 

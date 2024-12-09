@@ -81,7 +81,7 @@ def main(args, manager : PathManager):
         prev_cls_model_path = manager.get_prev_model_path('classifier')
         cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_cls_model_path, args.head_shared, device=args.device)
 
-        gen_network = UNet(T=args.T, num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
+        gen_network = UNet(T=args.T, num_prev_labels=sum([0]+args.class_nums[:task]), num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
         gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
         
@@ -200,7 +200,7 @@ def arg():
     parser.add_argument("--ddim_sampling_steps", type=int, default=100, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
-    parser.add_argument("--cls_lr", type=float, default=2e-4, help="Learning rate of classifier")
+    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
     parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
 
 
@@ -218,13 +218,13 @@ def arg():
     parser.add_argument("--channel", type=int, default=128, help="Base number of channels")
     parser.add_argument("--channel_mult", type=int, nargs='+', default=[1, 2, 2, 2], help="Channel multiplier for each level")
     parser.add_argument("--num_res_blocks", type=int, default=2, help="Number of residual blocks per level")
-    parser.add_argument("--dropout", type=float, default=0.15, help="Dropout rate")
+    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--multiplier", type=float, default=2.5, help="Multiplier for diffusion loss")
     parser.add_argument("--beta_1", type=float, default=1e-4, help="Beta start value for scheduler")
     parser.add_argument("--beta_T", type=float, default=0.028, help="Beta end value for scheduler")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
 
-    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
+    parser.add_argument("--cfg_factor", type=float, default=5.0, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
     parser.add_argument("--cg_factor", type=float, default=-0.3, help="Weight for classifier guidance")         # CG original paper best factor : 0.3
     parser.add_argument("--kd_sampling_ratio", type=float, default=0.2)
     parser.add_argument("--kd_factor", type=float, default=1.0)                                                 # LWF original paper best factor : ?
