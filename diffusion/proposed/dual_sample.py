@@ -38,8 +38,8 @@ class DualGuidedModule(CFGModule):
             (1 - extract(self.var_scheduler.alphas_cumprod, prev_t)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         )
         t_expanded = t[:, None, None, None]
-        var = torch.where(t_expanded>1, var, torch.zeros_like(var))
         noise_factor = var.sqrt()
+        noise_factor = torch.where(t_expanded>1, noise_factor, torch.zeros_like(noise_factor))
         
         eps_cond = self.network(x_t, t, y)
         # edit required

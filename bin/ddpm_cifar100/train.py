@@ -82,14 +82,14 @@ def eval(modelConfig: Dict):
         for i in range(1, modelConfig["batch_size"] + 1):
             labelList.append(torch.ones(size=[1]).long() * k)
             if i % step == 0:
-                if k < 100 - 1:
+                if k < 50 - 1:
                     k += 1
         labels = torch.cat(labelList, dim=0).long().to(device) + 1
         print("labels: ", labels)
         model = UNet(T=modelConfig["T"], num_labels=100, ch=modelConfig["channel"], ch_mult=modelConfig["channel_mult"],
                      num_res_blocks=modelConfig["num_res_blocks"], dropout=modelConfig["dropout"]).to(device)
 
-        model.load_state_dict(torch.load(modelConfig['test_load_weight']))
+        model.load_state_dict(torch.load('/home/jmyang/workspace/ddgr-/save/experiments3/task0/generator/weights.pth'))
         print("model load weight done.")
         model.eval()
         sampler = GaussianDiffusionSampler(

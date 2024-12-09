@@ -39,6 +39,7 @@ class CFGModule(nn.Module):
         noise_factor = (
             (1 - extract(self.var_scheduler.alphas_cumprod, prev_t)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         ).sqrt()
+        
         t_expanded = t[:, None, None, None]
         noise_factor = torch.where(t_expanded>1, noise_factor, torch.zeros_like(noise_factor))
         
@@ -83,7 +84,7 @@ class CFGModule(nn.Module):
     def loss_function(self, x_0, y):
         batch_size = x_0.shape[0]
         t = (
-            torch.randint(1, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
+            torch.randint(0, self.var_scheduler.num_steps, size=(batch_size,), device = self.device)
             .long()
         )
         noise = torch.randn_like(x_0).to(self.device)

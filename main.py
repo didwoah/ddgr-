@@ -86,7 +86,9 @@ def main(args, manager : PathManager):
         gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
         
         # get generated image dataset
+        var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
         cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
+
         generated_dataset = get_generated_dataset(
             cfg_model, 
             args.num_gen_samples,
@@ -112,10 +114,12 @@ def main(args, manager : PathManager):
                 args.gen_batch_size, 
                 sum(args.class_nums[:task]), 
                 manager, 
-                args.device)
+                args.device,
+                aug = True)
             
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
+        print(f'{len(cls_loader)} samples are concated.')
 
         cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
         cls_network = task_classifier_train(cls_network, cls_loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
@@ -187,8 +191,8 @@ def arg():
     parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
 
 
-    parser.add_argument("--cls_batch_size", type=int, default=64, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=64, help="Batch size for training generator")
+    parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
+    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
@@ -196,8 +200,8 @@ def arg():
     parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
-    parser.add_argument("--cls_lr", type=float, default=2e-4, help="Learning rate of classifier")
-    parser.add_argument("--gen_lr", type=float, default=2e-4, help="Learning rate of generator")
+    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
+    parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
 
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")

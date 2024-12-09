@@ -108,6 +108,8 @@ samples/
 _cache_*
 .download.cgi*
 
+*.pth
+
 sample/
 log/
 todo.txt
