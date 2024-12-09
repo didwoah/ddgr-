@@ -47,7 +47,7 @@ def main(args, manager : PathManager):
 
             # classifier pretraininig
             cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
-            cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+            cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
             cls_network = task_classifier_train(cls_network, dataloader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
             # classifier save
@@ -58,7 +58,7 @@ def main(args, manager : PathManager):
             gen_network = UNet(T=args.T, num_labels=num_labels, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
 
-            gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+            gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
             cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
             warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
@@ -81,7 +81,7 @@ def main(args, manager : PathManager):
         prev_cls_model_path = manager.get_prev_model_path('classifier')
         cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), sum(args.class_nums[:task]), prev_cls_model_path, args.head_shared, device=args.device)
 
-        gen_network = UNet(T=args.T, num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
+        gen_network = UNet(T=args.T, num_prev_labels=sum([0]+args.class_nums[:task]), num_labels=100, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
         gen_network.load_state_dict(torch.load(manager.get_prev_model_path('generator')))
         
@@ -117,7 +117,7 @@ def main(args, manager : PathManager):
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
 
-        cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+        cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
         cls_network = task_classifier_train(cls_network, cls_loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
         # eval acc & classifier save
@@ -127,13 +127,13 @@ def main(args, manager : PathManager):
         torch.save(cls_network.state_dict(), save_path)
 
         # generator train
-        gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+        gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
         cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
         warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
-        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
+        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
 
         if args.diffusion_kd:
             teacher_network = deepcopy(gen_network)
@@ -187,8 +187,8 @@ def arg():
     parser.add_argument("--dual_guidance", action="store_true", help="Using dual guidance or not")
 
 
-    parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
+    parser.add_argument("--cls_batch_size", type=int, default=64, help="Batch size for training classifier")
+    parser.add_argument("--gen_batch_size", type=int, default=64, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
@@ -196,8 +196,8 @@ def arg():
     parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
-    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
-    parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
+    parser.add_argument("--cls_lr", type=float, default=2e-4, help="Learning rate of classifier")
+    parser.add_argument("--gen_lr", type=float, default=2e-4, help="Learning rate of generator")
 
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
@@ -214,13 +214,13 @@ def arg():
     parser.add_argument("--channel", type=int, default=128, help="Base number of channels")
     parser.add_argument("--channel_mult", type=int, nargs='+', default=[1, 2, 2, 2], help="Channel multiplier for each level")
     parser.add_argument("--num_res_blocks", type=int, default=2, help="Number of residual blocks per level")
-    parser.add_argument("--dropout", type=float, default=0.15, help="Dropout rate")
+    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--multiplier", type=float, default=2.5, help="Multiplier for diffusion loss")
     parser.add_argument("--beta_1", type=float, default=1e-4, help="Beta start value for scheduler")
     parser.add_argument("--beta_T", type=float, default=0.028, help="Beta end value for scheduler")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping value")
 
-    parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
+    parser.add_argument("--cfg_factor", type=float, default=5.0, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
     parser.add_argument("--cg_factor", type=float, default=-0.3, help="Weight for classifier guidance")         # CG original paper best factor : 0.3
     parser.add_argument("--kd_sampling_ratio", type=float, default=0.2)
     parser.add_argument("--kd_factor", type=float, default=1.0)                                                 # LWF original paper best factor : ?
