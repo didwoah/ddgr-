@@ -88,9 +88,11 @@ def main(args, manager : PathManager):
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
         cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
 
+        num_gen_samples = int(args.gen_ratio * (sum(args.class_nums[:task]) * 500))
+
         generated_dataset = get_generated_dataset(
             cfg_model, 
-            args.num_gen_samples,
+            num_gen_samples,
             args.gen_batch_size, 
             sum(args.class_nums[:task]), 
             manager, 
@@ -99,6 +101,8 @@ def main(args, manager : PathManager):
         augmented_dataset = None
         
         if args.dual_guidance:
+            num_aug_samples = int(args.aug_ratio * (sum(args.class_nums[:task]) * 500))
+
             dual_guided_model = DualGuidedModule(
                 gen_network, 
                 var_scheduler,
@@ -109,7 +113,7 @@ def main(args, manager : PathManager):
                 args.device)
             augmented_dataset = get_generated_dataset(
                 dual_guided_model, 
-                args.num_aug_samples, 
+                num_aug_samples, 
                 args.gen_batch_size, 
                 sum(args.class_nums[:task]), 
                 manager, 
@@ -118,6 +122,7 @@ def main(args, manager : PathManager):
             
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
+        
         print(f'{len(cls_loader)} samples are concated.')
 
         cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
@@ -205,8 +210,8 @@ def arg():
 
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="Device to train on")
 
-    parser.add_argument("--num_gen_samples", type=int, default=6500, help="relative size of generated dataset")
-    parser.add_argument("--num_aug_samples", type=int, default=1500, help="relative size of generated dataset")
+    parser.add_argument("--gen_ratio", type=float, default=.5, help="ratio generated dataset against prev samples num")
+    parser.add_argument("--aug_ratio", type=float, default=.1, help="ratio augmented dataset against prev samples num")
 
     parser.add_argument("--class_nums", type=list, default=[50, 5, 5, 5, 5, 5], help="[50, 5, 5, 5, 5,]")
 
