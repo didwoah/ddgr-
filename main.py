@@ -25,7 +25,7 @@ import logger as Logger
 
 def main(args, manager : PathManager):
 
-    gen_epochs = int(args.gen_iters / (50000 / args.gen_batch_size))
+    gen_iters = ( 50000 * args.gen_epochs ) // args.gen_batch_size
     logger = Logger.FileLogger("./save/experiments0", "log.txt")
     logger.on()
 
@@ -59,16 +59,16 @@ def main(args, manager : PathManager):
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
 
             gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
-            cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
+            cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
 
-            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
+            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
 
             var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
             cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
 
             trainer = DiffusionTrainer(cfg_model, manager)
 
-            trainer.train(dataloader, gen_optimizer, args.gen_iters, warmUpScheduler)
+            trainer.train(dataloader, gen_optimizer, gen_iters, warmUpScheduler)
                 
             # generator save
             save_path = manager.get_model_path('generator')
@@ -132,9 +132,9 @@ def main(args, manager : PathManager):
 
         # generator train
         gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
-        cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
+        cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
 
-        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
+        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
         cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
@@ -164,7 +164,7 @@ def main(args, manager : PathManager):
         else:
             diff_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.gen_batch_size, class_idx_lst[task], manager)
             
-        trainer.train(diff_loader, gen_optimizer, args.gen_iters, warmUpScheduler)
+        trainer.train(diff_loader, gen_optimizer, gen_iters, warmUpScheduler)
             
         # generator save
         save_path = manager.get_model_path('generator')
@@ -192,12 +192,12 @@ def arg():
 
 
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=80, help="Batch size for training generator")
+    parser.add_argument("--gen_batch_size", type=int, default=64, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
-    parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
+    parser.add_argument("--gen_epochs", type=int, default=70, help="Number of iterations of generator")
 
-    parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
+    parser.add_argument("--ddim_sampling_steps", type=int, default=100, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
     parser.add_argument("--cls_lr", type=float, default=2e-4, help="Learning rate of classifier")
