@@ -136,7 +136,7 @@ def main(args, manager : PathManager):
         warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
-        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
+        cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
 
         if args.diffusion_kd:
             teacher_network = deepcopy(gen_network)
