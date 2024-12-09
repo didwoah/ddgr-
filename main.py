@@ -133,7 +133,7 @@ def main(args, manager : PathManager):
         gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
         cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
-        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.epochs // 10, after_scheduler=cosineScheduler)
+        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
 
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
         cfg_model = CFGModule(gen_network, var_scheduler, args.ddim)
