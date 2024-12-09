@@ -144,9 +144,10 @@ def get_generated_dataset(
         batch_size, 
         num_prev_labels, 
         manager, 
-        device) -> ImageFolderDataset:
+        device,
+        aug = False) -> ImageFolderDataset:
 
-    folder_path = manager.get_image_path()
+    folder_path = manager.get_image_path(aug)
     file_index = 0
 
     map = manager.get_map()

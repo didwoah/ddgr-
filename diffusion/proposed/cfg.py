@@ -39,6 +39,7 @@ class CFGModule(nn.Module):
         noise_factor = (
             (1 - extract(self.var_scheduler.alphas_cumprod, prev_t)) / (1 - extract(self.var_scheduler.alphas_cumprod, t)) * extract(self.var_scheduler.betas, t)
         ).sqrt()
+        
         t_expanded = t[:, None, None, None]
         noise_factor = torch.where(t_expanded>1, noise_factor, torch.zeros_like(noise_factor))
         

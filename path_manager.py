@@ -74,10 +74,13 @@ class PathManager():
         
         return model_path
     
-    def get_image_path(self):
+    def get_image_path(self, aug = False):
 
         task_root_path = self._get_task_root_path()
-        image_path = os.path.join(task_root_path, 'generated_image')
+        if aug:
+            image_path = os.path.join(task_root_path, 'augmented_image')
+        else:
+            image_path = os.path.join(task_root_path, 'generated_image')
 
         os.makedirs(image_path, exist_ok = True)
 

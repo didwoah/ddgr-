@@ -47,7 +47,7 @@ def main(args, manager : PathManager):
 
             # classifier pretraininig
             cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
-            cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+            cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
             cls_network = task_classifier_train(cls_network, dataloader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
             # classifier save
@@ -58,7 +58,7 @@ def main(args, manager : PathManager):
             gen_network = UNet(T=args.T, num_labels=num_labels, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
 
-            gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+            gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
             cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
             warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
@@ -120,7 +120,7 @@ def main(args, manager : PathManager):
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
         print(f'{len(cls_loader)} samples are concated.')
 
-        cls_optimzier = torch.optim.Adam(cls_network.parameters(), lr=args.cls_lr)
+        cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
         cls_network = task_classifier_train(cls_network, cls_loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
 
         # eval acc & classifier save
@@ -130,7 +130,7 @@ def main(args, manager : PathManager):
         torch.save(cls_network.state_dict(), save_path)
 
         # generator train
-        gen_optimizer = torch.optim.Adam(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
+        gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
         cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=gen_epochs, eta_min=0, last_epoch=-1)
 
         warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=gen_epochs // 10, after_scheduler=cosineScheduler)
@@ -191,7 +191,7 @@ def arg():
 
 
     parser.add_argument("--cls_batch_size", type=int, default=32, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
+    parser.add_argument("--gen_batch_size", type=int, default=80, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_iters", type=int, default=40000, help="Number of iterations of generator")
@@ -199,7 +199,7 @@ def arg():
     parser.add_argument("--ddim_sampling_steps", type=int, default=50, help="DDIM num sampling steps")
     parser.add_argument("--eta", type=float, default=0.0, help="DDIM variance coefficient for deterministic or probabilistic")
 
-    parser.add_argument("--cls_lr", type=float, default=1e-4, help="Learning rate of classifier")
+    parser.add_argument("--cls_lr", type=float, default=2e-4, help="Learning rate of classifier")
     parser.add_argument("--gen_lr", type=float, default=1e-4, help="Learning rate of generator")
 
 
