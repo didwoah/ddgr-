@@ -114,7 +114,8 @@ def main(args, manager : PathManager):
                 args.gen_batch_size, 
                 sum(args.class_nums[:task]), 
                 manager, 
-                args.device)
+                args.device,
+                aug = True)
             
         # classifier train
         cls_loader = get_loader([new_task_dataset, generated_dataset, augmented_dataset], args.cls_batch_size, class_idx_lst[task], manager)
