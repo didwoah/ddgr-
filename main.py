@@ -54,7 +54,7 @@ def main(args, manager : PathManager):
             torch.save(cls_network.state_dict(), save_path)
 
             # generator pretraining
-            gen_network = UNet(T=args.T, num_labels=num_labels, ch=args.channel, ch_mult=args.channel_mult,
+            gen_network = UNet(T=args.T, num_prev_labels=sum([0]+args.class_nums[:task]), num_labels=num_labels, ch=args.channel, ch_mult=args.channel_mult,
                      num_res_blocks=args.num_res_blocks, dropout=args.dropout).to(args.device)
 
             gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
