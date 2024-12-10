@@ -22,10 +22,12 @@ from path_manager import PathManager
 from copy import deepcopy
 import logger as Logger
 
+from gen_eval import eval_gen_dataset
+
 def main(args, manager : PathManager):
 
     gen_iters = ( 50000 * args.gen_epochs ) // args.gen_batch_size
-    logger = Logger.FileLogger("./save/experiments0", "log.txt")
+    logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
     logger.on()
 
     if args.dataset == 'cifar100':
@@ -74,6 +76,9 @@ def main(args, manager : PathManager):
             cfg_model.save(save_path)
 
             manager.update_task_count()
+            logger.off()
+            logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
+            logger.on()
             continue
 
         # init netwrok
@@ -175,11 +180,13 @@ def main(args, manager : PathManager):
         cfg_model.save(save_path)
 
         # eval fid
+        # eval_gen_dataset(args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
         manager.update_task_count()
+        logger.off()
+        logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
+        logger.on()
 
     logger.off()
-
-
 
 def arg():
     parser = argparse.ArgumentParser(description="Example of argparse usage")
