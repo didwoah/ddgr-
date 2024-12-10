@@ -26,7 +26,6 @@ from gen_eval import eval_gen_dataset
 
 def main(args, manager : PathManager):
 
-    gen_iters = ( 50000 * args.gen_epochs ) // args.gen_batch_size
     logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
     logger.on()
 
