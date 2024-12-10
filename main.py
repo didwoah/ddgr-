@@ -26,7 +26,6 @@ from gen_eval import eval_gen_dataset
 
 def main(args, manager : PathManager):
 
-    gen_iters = ( 50000 * args.gen_epochs ) // args.gen_batch_size
     logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
     logger.on()
 
@@ -36,9 +35,12 @@ def main(args, manager : PathManager):
     elif args.dataset == 'cifar10':
         class_idx_lst = split_task(args.class_nums, 10)
         num_labels = 10
-
+    
     for task in range(len(class_idx_lst)):
         print(f'task {task} start~')
+        
+        # gen iters define
+        gen_iters = ( 100 * sum(class_idx_lst[:task+1]) * args.gen_epochs ) // args.gen_batch_size
 
         new_task_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task])
 
@@ -173,6 +175,8 @@ def main(args, manager : PathManager):
                 args.kd_factor,
                 device = args.device
             )
+            # gen_iters edit
+            gen_iters = ( 100 * class_idx_lst[task] * args.gen_epochs ) // args.gen_batch_size
         else:
             trainer = DiffusionTrainer(cfg_model, manager)
 
@@ -211,7 +215,7 @@ def arg():
 
 
     parser.add_argument("--cls_batch_size", type=int, default=64, help="Batch size for training classifier")
-    parser.add_argument("--gen_batch_size", type=int, default=64, help="Batch size for training generator")
+    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for training generator")
 
     parser.add_argument("--cls_epochs", type=int, default=100, help="Number of epochs of classifier")
     parser.add_argument("--gen_epochs", type=int, default=70, help="Number of iterations of generator")
@@ -246,7 +250,7 @@ def arg():
     parser.add_argument("--cfg_factor", type=float, default=1.8, help="Weight for classifier-free guidance")    # CFG original paper best factor : 1.8
     parser.add_argument("--cg_factor", type=float, default=-0.3, help="Weight for classifier guidance")         # CG original paper best factor : 0.3
     parser.add_argument("--kd_sampling_ratio", type=float, default=0.2)
-    parser.add_argument("--kd_factor", type=float, default=1.0)                                                 # LWF original paper best factor : ?
+    parser.add_argument("--kd_factor", type=float, default=5.0)                                                 # LWF original paper best factor : ?
 
     args = parser.parse_args()
     
