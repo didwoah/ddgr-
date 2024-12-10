@@ -12,7 +12,7 @@ def eval_gen_dataset(dataset_name, class_idx_lst, manager: PathManager, device =
     fids = {}
 
     real_dataset = ConcatDataset([
-        get_dataset_new_task(dataset_name = dataset_name, class_indicies = class_indicies)
+        get_dataset_new_task(dataset_name = dataset_name, class_indicies = class_indicies)[0]
         for class_indicies in class_idx_lst
     ])
 

@@ -1,11 +1,13 @@
 import os
 from pytorch_fid import fid_score
 
-from torch.utils.data import Dataset
+from tqdm import tqdm
+
+from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import ToTensor, Resize
 import torch
 import numpy as np
-from torchvision.models import inception_v3
+from torchvision.models import inception_v3, Inception_V3_Weights
 from scipy.linalg import sqrtm
 
 from dataset_utils import RelabeledDataset
@@ -38,7 +40,7 @@ def change_file_extensions(folder_path, old_extension, new_extension):
 
 # Inception 모델 준비
 def get_inception_model():
-    model = inception_v3(pretrained=True, transform_input=False).eval()
+    model = inception_v3(weights=Inception_V3_Weights.DEFAULT, transform_input=False).eval()
     model.fc = torch.nn.Identity()  # Feature vector만 추출
     return model
 
@@ -46,10 +48,22 @@ def get_inception_model():
 # 특징 추출 함수
 def extract_feature(image, model, device="cuda"):
     image = Resize((299, 299))(image)  # Inception 모델 크기에 맞춤
-    image = ToTensor()(image).unsqueeze(0).to(device)  # 배치 추가
+    if not isinstance(image, torch.Tensor):
+        image = ToTensor()(image)
+    image = image.unsqueeze(0).to(device)  # 배치 추가
     with torch.no_grad():
         features = model(image)
     return features.cpu().numpy()
+
+def extract_features(dataloader, model, device="cuda"):
+    features = []
+    model.eval()
+    for images in dataloader:
+        images = images.to(device)
+        with torch.no_grad():
+            feature = model(images)
+        features.append(feature.cpu())
+    return torch.cat(features, dim=0).numpy()
 
 
 def calculate_fid(real_features, fake_features):
@@ -64,11 +78,30 @@ def calculate_fid(real_features, fake_features):
     fid = diff.dot(diff) + np.trace(sigma_r + sigma_f - 2 * covmean)
     return fid
 
+class InceptionNetDataset(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
 
-def get_fid_value(real_dataset: Dataset, fake_dataset: Dataset, device):
+        self.transform = Resize((299, 299))
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.transform(self.dataset[idx][0])
+
+
+def get_fid_value(real_dataset: Dataset, fake_dataset: Dataset, device, batch_size=32):
     inception_model = get_inception_model().to(device)
 
-    real_features = np.vstack([extract_feature(item[0], inception_model, device) for item in real_dataset])
-    fake_features = np.vstack([extract_feature(item[0], inception_model, device) for item in fake_dataset])
+    real_dataset = InceptionNetDataset(real_dataset)
+    real_dataloader = DataLoader(real_dataset, batch_size=batch_size,shuffle=False)
+    real_pbar = tqdm(real_dataloader, desc="extracting feature of real dataset", leave=False)
+    real_features = extract_features(real_pbar, inception_model, device)
+
+    fake_dataset = InceptionNetDataset(fake_dataset)
+    fake_dataloader = DataLoader(fake_dataset, batch_size=batch_size,shuffle=False)
+    fake_pbar = tqdm(fake_dataloader, desc="extracting feature of fake dataset", leave=False)
+    fake_features = extract_features(fake_pbar, inception_model, device)
 
     return calculate_fid(real_features, fake_features)

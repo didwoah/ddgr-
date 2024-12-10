@@ -25,8 +25,8 @@ import logger as Logger
 from gen_eval import eval_gen_dataset
 
 def main(args, manager : PathManager):
-
-    logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
+    
+    logger = Logger.FileLogger(manager.root_path, "log.txt")
     logger.on()
 
     if args.dataset == 'cifar100':
@@ -40,7 +40,7 @@ def main(args, manager : PathManager):
         print(f'task {task} start~')
         
         # gen iters define
-        gen_iters = ( 100 * sum(class_idx_lst[:task+1]) * args.gen_epochs ) // args.gen_batch_size
+        gen_iters = ( 100 * sum(args.class_nums[:task+1]) * args.gen_epochs ) // args.gen_batch_size
 
         new_task_dataset, _ = get_dataset_new_task(args.dataset, class_idx_lst[task])
 
@@ -82,9 +82,6 @@ def main(args, manager : PathManager):
             cfg_model.save(save_path)
 
             manager.update_task_count()
-            logger.off()
-            logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
-            logger.on()
             continue
 
         # init netwrok
@@ -176,7 +173,7 @@ def main(args, manager : PathManager):
                 device = args.device
             )
             # gen_iters edit
-            gen_iters = ( 100 * class_idx_lst[task] * args.gen_epochs ) // args.gen_batch_size
+            gen_iters = ( 100 * args.class_nums[task] * args.gen_epochs ) // args.gen_batch_size
         else:
             trainer = DiffusionTrainer(cfg_model, manager)
 
@@ -194,9 +191,6 @@ def main(args, manager : PathManager):
         # eval fid
         eval_gen_dataset(args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
         manager.update_task_count()
-        logger.off()
-        logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
-        logger.on()
 
     logger.off()
 

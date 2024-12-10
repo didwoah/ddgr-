@@ -4,14 +4,14 @@ import json
 class PathManager():
     def __init__(self, args, base_path="./save", map_path = None):
         self.base_path = base_path
-        self.__root_path = self.create_root_path()
+        self.root_path = self.create_root_path()
         self.__now_task = 0
         self.__map_path = map_path
         self._save_args_to_file(args)
 
     def get_map(self):
         if self.__map_path is None:
-            self.__map_path = os.path.join(self.__root_path, 'map.json')
+            self.__map_path = os.path.join(self.root_path, 'map.json')
             with open(self.__map_path, "w") as map_file:
                 json.dump({}, map_file)
         with open(self.__map_path, "r") as map_file:
@@ -28,7 +28,7 @@ class PathManager():
     
     def _save_args_to_file(self, args, file_path="args.txt"):
 
-        file_path = os.path.join(self.__root_path, file_path)
+        file_path = os.path.join(self.root_path, file_path)
         with open(file_path, "w") as file:
             json.dump(vars(args), file, indent=4)
 
@@ -57,7 +57,7 @@ class PathManager():
         return root_path
     
     def _get_task_root_path(self):
-        task_root_path = os.path.join(self.__root_path, f'task{self.__now_task}')
+        task_root_path = os.path.join(self.root_path, f'task{self.__now_task}')
         os.makedirs(task_root_path, exist_ok = True)
 
         return task_root_path
@@ -97,7 +97,7 @@ class PathManager():
 
     def _get_prev_task_root_path(self):
         assert self.__now_task > 0
-        task_root_path = os.path.join(self.__root_path, f'task{self.__now_task - 1}')
+        task_root_path = os.path.join(self.root_path, f'task{self.__now_task - 1}')
         os.makedirs(task_root_path, exist_ok = True)
 
         return task_root_path
