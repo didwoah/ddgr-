@@ -68,7 +68,7 @@ def calculate_fid(real_features, fake_features):
 def get_fid_value(real_dataset: Dataset, fake_dataset: Dataset, device):
     inception_model = get_inception_model().to(device)
 
-    real_features = np.vstack([extract_feature(img, inception_model, device) for img,  _ in real_dataset])
-    fake_features = np.vstack([extract_feature(img, inception_model, device) for img,  _ in fake_dataset])
+    real_features = np.vstack([extract_feature(item[0], inception_model, device) for item in real_dataset])
+    fake_features = np.vstack([extract_feature(item[0], inception_model, device) for item in fake_dataset])
 
     return calculate_fid(real_features, fake_features)

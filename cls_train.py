@@ -4,15 +4,22 @@ from tqdm import tqdm
 import os
 from collections import defaultdict
 
+from copy import deepcopy
+
 from dataset import get_dataset_new_task, get_loader
 from visualize import plot_task_vs_accuracy
 
 
 def task_classifier_train(
-    model, dataloader, optimzier, epochs = 100, device="cuda"
+    model:nn.Module, dataloader, optimzier, 
+    manager, val_dataset_name, val_class_indicies, val_epoch_step=10, 
+    epochs = 100, device="cuda"
 ):
     criterion = nn.CrossEntropyLoss()
     model.to(device)
+
+    best_eval_acc = 0
+    best_model = deepcopy(model)
 
     progress_bar = tqdm(range(epochs), desc="Training Progress", leave=True)
 
@@ -38,8 +45,21 @@ def task_classifier_train(
         avg_loss = running_loss / len(dataloader)
         accuracy = 100.0 * correct / total
 
+        if epoch % val_epoch_step == 0 or epoch == epochs-1:
+            eval_acc, _ = _eval_classifier(
+                model=model, 
+                dataset_name=val_dataset_name, 
+                class_indicies=val_class_indicies, 
+                saver=manager, device=device)
+            
+            if eval_acc > best_eval_acc:
+                best_eval_acc = eval_acc
+                best_model = deepcopy(model)
+
         # Update progress bar
-        progress_bar.set_postfix(epoch=epoch + 1, loss=f"{avg_loss:.4f}", accuracy=f"{accuracy:.2f}%")
+        progress_bar.set_postfix(epoch=epoch + 1, loss=f"{avg_loss:.4f}", accuracy=f"{accuracy:.2f}%", last_eval_acc=f"{eval_acc:.2f}%")
+
+    model.load_state_dict(best_model.state_dict())
 
     print("Classifier Training completed.")
     return model

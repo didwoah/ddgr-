@@ -49,7 +49,10 @@ def main(args, manager : PathManager):
             # classifier pretraininig
             cls_network = get_new_task_classifier(sum(args.class_nums[:task+1]), prev_model_path = None, head_shared = args.head_shared, device = args.device)
             cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
-            cls_network = task_classifier_train(cls_network, dataloader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
+            cls_network = task_classifier_train(
+                cls_network, dataloader, cls_optimzier, 
+                manager=saver, val_dataset_name=args.dataset, val_class_indicies=class_idx_lst[task],
+                epochs=args.cls_epochs, device = args.device)
 
             # classifier save
             save_path = manager.get_model_path('classifier')
@@ -62,7 +65,8 @@ def main(args, manager : PathManager):
             gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
             cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
 
-            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
+            warm_epoch = max(args.gen_epochs // 10, 1)
+            warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=warm_epoch, after_scheduler=cosineScheduler)
 
             var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
             cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
@@ -131,7 +135,10 @@ def main(args, manager : PathManager):
         print(f'{len(cls_loader)} samples are concated.')
 
         cls_optimzier = torch.optim.AdamW(cls_network.parameters(), lr=args.cls_lr)
-        cls_network = task_classifier_train(cls_network, cls_loader, cls_optimzier, epochs=args.cls_epochs, device = args.device)
+        cls_network = task_classifier_train(
+            cls_network, cls_loader, cls_optimzier, 
+            manager=saver, val_dataset_name=args.dataset, val_class_indicies=class_idx_lst[task],
+            epochs=args.cls_epochs, device = args.device)
 
         # eval acc & classifier save
         eval_classifier(cls_network, args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
@@ -143,7 +150,8 @@ def main(args, manager : PathManager):
         gen_optimizer = torch.optim.AdamW(gen_network.parameters(), lr=args.gen_lr, weight_decay=1e-4)
         cosineScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=gen_optimizer, T_max=args.gen_epochs, eta_min=0, last_epoch=-1)
 
-        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=args.gen_epochs // 10, after_scheduler=cosineScheduler)
+        warm_epoch = max(args.gen_epochs // 10, 1)
+        warmUpScheduler = GradualWarmupScheduler(optimizer=gen_optimizer, multiplier=args.multiplier, warm_epoch=warm_epoch, after_scheduler=cosineScheduler)
 
         var_scheduler = DDPMScheduler(args.T, args.beta_1, args.beta_T, args.device) if not args.ddim else DDIMScheduler(args.T, args.beta_1, args.beta_T, args.ddim_sampling_steps, args.eta, args.device)
         cfg_model = CFGModule(gen_network, var_scheduler, args.ddim, args.cfg_factor, args.device)
@@ -180,7 +188,7 @@ def main(args, manager : PathManager):
         cfg_model.save(save_path)
 
         # eval fid
-        # eval_gen_dataset(args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
+        eval_gen_dataset(args.dataset, class_idx_lst[:task + 1], manager, device = args.device)
         manager.update_task_count()
         logger.off()
         logger = Logger.FileLogger(manager.get_results_path(), "log.txt")
